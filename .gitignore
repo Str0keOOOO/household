@@ -5,6 +5,7 @@
 .omnigibson/
 .state/
 .tmp/
+.tools/
 .xdg/
 data/
 envs/

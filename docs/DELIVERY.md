@@ -19,6 +19,9 @@ intentionally pending the user's explicit acceptance of the required licenses.
 
 - BEHAVIOR-1K source submodule: v3.7.2, commit
   `88454bd04f75dc57c00ab1f1a00bcde1ff505950`, complete.
+- Miniforge: v26.5.3-0, SHA-256 verified as
+  `14db468222ad564658656f769506056209b6dc375f5e7dfd31eb5ebbf08fa529`, installed
+  only at `.tools/miniforge3`.
 - No Conda environment, Isaac Sim package, Hugging Face asset, decryption key, or
   R1Pro asset bundle has been downloaded yet.
 

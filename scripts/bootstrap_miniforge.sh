@@ -34,5 +34,5 @@ if [[ "$expected_hash" != "$actual_hash" ]]; then
 fi
 
 bash "$ARCHIVE" -b -p "$MINIFORGE_PREFIX"
-"$MINIFORGE_PREFIX/bin/conda" config --file "$CONDARC" --set auto_activate_base false
+"$MINIFORGE_PREFIX/bin/conda" config --file "$CONDARC" --set auto_activate false
 "$MINIFORGE_PREFIX/bin/conda" --version

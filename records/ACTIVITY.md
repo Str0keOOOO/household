@@ -19,3 +19,7 @@
 - Recorded preflight results in `records/PREFLIGHT.md` and added isolated setup,
   launch, and reporting scripts. No Conda environment, Isaac Sim package, or
   BEHAVIOR asset has been downloaded yet.
+- Downloaded and SHA-256-verified the pinned Miniforge `26.5.3-0` installer, then
+  installed Conda `26.5.3` under `.tools/miniforge3`. Its package cache and
+  temporary directory resolve inside this workspace; the existing user-level
+  `.conda/environments.txt` predates this work and was not modified.
