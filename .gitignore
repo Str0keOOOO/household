@@ -1,0 +1,25 @@
+# Local environments, data, caches, and runtime output. None of these are source.
+.cache/
+.conda/
+.downloads/
+.omnigibson/
+.state/
+.tmp/
+.xdg/
+data/
+envs/
+runs/
+
+# Generated, machine-specific records are retained locally but not committed.
+records/runtime/
+
+# Python and editor by-products.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.vscode/
+.idea/
+
+# Do not accidentally commit licensed BEHAVIOR assets if an upstream default path is used.
+third_party/BEHAVIOR-1K/datasets/

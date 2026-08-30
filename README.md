@@ -1,0 +1,72 @@
+# Household robotics simulation workspace
+
+This repository is the isolated, reproducible workspace for installing and exercising
+BEHAVIOR-1K / OmniGibson for household-service-robot simulation. It is deliberately
+an integration repository: upstream source is preserved as a Git submodule, while
+local scripts and documentation describe how to create an environment, download
+licensed assets, and run examples.
+
+## Layout
+
+```text
+.
+├── third_party/BEHAVIOR-1K/   # Unmodified upstream Git submodule
+├── scripts/                   # Isolated setup, preflight, run, and record helpers
+├── docs/                      # Decisions, sources, resources, and operating notes
+├── records/                   # Human-maintained activity and preflight records
+├── config/                    # Local-only tool configuration templates
+├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
+├── envs/                      # Conda environments (ignored by Git)
+├── .conda/, .cache/, .tmp/    # Package/cache/temp data (ignored by Git)
+└── runs/                      # Demo logs and output (ignored by Git)
+```
+
+Only source, scripts, documentation, configuration templates, and Git submodule
+pointers are version-controlled. Conda environments, Isaac Sim packages, caches,
+encrypted BEHAVIOR data, decryption keys, and generated output are intentionally
+excluded from Git and remain under this directory.
+
+## Version policy
+
+The desired policy is the newest version that is supported by the actual server,
+not simply the newest upstream commit. This server runs Ubuntu 20.04, so the
+selected upstream version is **BEHAVIOR-1K v3.7.2**, which bundles R1Pro and uses
+Isaac Sim 4.5. Isaac Sim 4.5 officially supports Ubuntu 20.04 and the observed
+NVIDIA driver version. Newer BEHAVIOR v3.9.2 uses Isaac Sim 5.1, whose official
+platform support starts at Ubuntu 22.04; it is deliberately not forced here.
+
+Exact version observations and links are in [versions.lock](versions.lock) and
+[docs/SOURCES.md](docs/SOURCES.md).
+
+## Normal workflow
+
+```bash
+cd /data6/xuchenfei/household
+./setup.sh preflight
+./setup.sh bootstrap
+# After explicitly accepting the listed licenses:
+./setup.sh install --accept-licenses
+./scripts/run_official_quickstart.sh
+./scripts/run_r1pro_demo.sh
+```
+
+`install --accept-licenses` is intentionally an explicit opt-in: it accepts the
+Conda terms, NVIDIA Isaac Sim EULA, and BEHAVIOR dataset license on the caller's
+behalf. See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using it.
+
+## Repository rules
+
+- External source repositories belong under `third_party/` and are Git submodules.
+- Do not edit files below `third_party/BEHAVIOR-1K/`. Local integration work belongs
+  in this repository outside that path.
+- Do not commit downloaded datasets, decryption keys, environments, caches, or
+  generated output. The dataset license also prohibits redistribution.
+- Do not modify global Git, Conda, Pip, shell, OS, or driver configuration. The
+  scripts redirect supported runtime state into this workspace instead.
+- The scripts do not override the user's home directory. Any residual third-party
+  write outside the redirected locations is treated as a defect to investigate.
+
+## Current status
+
+See [docs/DELIVERY.md](docs/DELIVERY.md) for the current handoff state and
+[records/ACTIVITY.md](records/ACTIVITY.md) for an append-only summary of work.

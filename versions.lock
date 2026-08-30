@@ -1,0 +1,18 @@
+# Version choices are pinned for reproducibility. Last reviewed: 2026-08-31.
+
+BEHAVIOR_1K_TAG=v3.7.2
+BEHAVIOR_1K_COMMIT=88454bd04f75dc57c00ab1f1a00bcde1ff505950
+BEHAVIOR_1K_UPSTREAM=https://github.com/StanfordVL/BEHAVIOR-1K.git
+
+# v3.7.2's setup script creates Python 3.10 and installs this simulator stack.
+PYTHON_VERSION=3.10
+ISAAC_SIM_VERSION=4.5.0
+PYTORCH_VERSION=2.6.0
+PYTORCH_CUDA_VERSION=12.4
+
+# Local Conda bootstrap pinned to the latest release checked on 2026-08-31.
+MINIFORGE_RELEASE=26.5.3-0
+MINIFORGE_INSTALLER=Miniforge3-26.5.3-0-Linux-x86_64.sh
+
+# Hardware selection is a default only; callers may override OMNIGIBSON_GPU_ID.
+DEFAULT_OMNIGIBSON_GPU_ID=1
