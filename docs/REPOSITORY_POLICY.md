@@ -1,28 +1,26 @@
-# Repository and dependency policy
+# 仓库与依赖管理策略
 
-## Ownership boundaries
+## 所有权边界
 
-- This top-level repository owns only its scripts, documentation, configuration,
-  and integration records.
-- Every manually added third-party source repository is placed under
-  `third_party/` as a Git submodule with an intentional revision.
-- `third_party/BEHAVIOR-1K` is upstream-owned and must remain clean. Do not patch,
-  reformat, or commit inside it for local experiments.
-- Future local adapters belong outside `third_party/`, with their own documented
-  relationship to an upstream revision.
+- 此顶层仓库只管理其自身的脚本、文档、配置和集成记录。
+- 每个手动添加的第三方源码仓库都必须作为 Git 子模块放在
+  `third_party/` 下，并固定到经过审慎选择的版本。
+- `third_party/BEHAVIOR-1K` 归上游维护，必须保持干净。不得为本地实验在其中
+  打补丁、重新格式化或提交代码。
+- 后续本地适配层应放在 `third_party/` 之外，并记录其与对应上游版本之间的关系。
 
-## Reproducibility boundaries
+## 可复现性边界
 
-- Git tracks human-authored source and exact submodule pointers.
-- It does not track Conda environments, Python wheel caches, NVIDIA packages,
-  generated results, encrypted assets, decryption keys, or other licensed data.
-- Scripts must retain a source URL, version, integrity check when available, target
-  path, and license note for each non-Git download.
-- Before upgrading a dependency, capture the previous revision, read release notes,
-  test the requested examples, and record the outcome in `docs/DELIVERY.md`.
+- Git 追踪人工编写的源码和精确的 Git 子模块指针。
+- Git 不追踪 Conda 环境、Python wheel 缓存、NVIDIA 软件包、生成结果、加密资源、
+  解密密钥或其他受许可约束的数据。
+- 对于每项非 Git 下载，脚本必须保留来源 URL、版本、可用时的完整性校验、目标路径
+  和许可证说明。
+- 升级依赖前，必须记录先前版本、阅读发行说明、测试所需示例，并将结果写入
+  `docs/DELIVERY.md`。
 
-## Isolation boundaries
+## 隔离边界
 
-All mutable state that the project can direct is scoped to this workspace. No
-script may modify global Git/Conda/Pip configuration, shell startup files, OS
-packages, driver settings, or files belonging to another project.
+项目能够控制的所有可变状态都应限定在此工作区内。任何脚本不得修改全局
+Git/Conda/Pip 配置、Shell 启动文件、操作系统软件包、驱动设置，或属于其他项目的
+文件。
