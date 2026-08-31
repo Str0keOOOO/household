@@ -15,7 +15,7 @@ licensed assets, and run examples.
 ├── src/                       # Local Python implementations called by scripts
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
-└── runs/                      # Demo logs and output (ignored by Git)
+└── runs/                      # Generated output: videos/ and logs/ (ignored by Git)
 ```
 
 Only source, scripts, documentation, configuration templates, and Git submodule
@@ -82,7 +82,8 @@ Isaac Sim 4.5 安装**，不可将其视为可用服务：
 ```
 
 该本地启动器沿用上游 R1 Pro BEHAVIOR 示例的预采样场景、任务配置和相机位姿，在
-无界面模式将 viewer camera 输出写入忽略的 `runs/r1pro-behavior-<UTC 时间>.mp4`。
+无界面模式将 viewer camera 输出写入忽略的
+`runs/videos/r1pro-behavior-<UTC 时间>.mp4`。
 它不会修改 `third_party/BEHAVIOR-1K/`。可用 `--steps 40 --frame-stride 2` 缩短演示，
 或用 `--width 640 --height 360` 控制分辨率。
 

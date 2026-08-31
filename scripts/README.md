@@ -37,7 +37,8 @@ conda activate behavior
 | 有限无头验证 | 无；上游示例是交互式的 | 两个包装器均可加 `--smoke` |
 
 包装器不会改动上游源码；它们只负责激活环境、设置本工作区数据路径，并将运行
-输出保存到忽略的 `runs/` 目录。
+输出按格式保存到忽略的 `runs/` 目录：MP4 位于 `runs/videos/`，日志位于
+`runs/logs/`。
 
 ## 无桌面录像
 
@@ -48,8 +49,9 @@ conda activate behavior
 ```
 
 它复用上游 `r1pro_behavior.yaml`、预采样场景和官方示例中的相机位姿，默认运行
-100 个随机动作、每 4 步保留一帧，写入 `runs/r1pro-behavior-<UTC 时间>.mp4`。可按需
-控制长度与画面大小，例如：
+100 个随机动作、每 4 步保留一帧，写入
+`runs/videos/r1pro-behavior-<UTC 时间>.mp4`；相应日志写入 `runs/logs/`。可按需控制
+长度与画面大小，例如：
 
 ```bash
 ./scripts/r1pro_record_demo.sh --steps 40 --fps 10 --frame-stride 2 --width 640 --height 360
@@ -60,8 +62,8 @@ conda activate behavior
 
 ## 批量任务场景视频
 
-以下命令生成 11 个任务的初始化场景视频，并全部保存至
-`runs/task_scene_videos/`：
+以下命令生成 11 个任务的初始化场景视频：MP4 全部保存至
+`runs/videos/task_scene/`，同名日志保存至 `runs/logs/task_scene/`：
 
 ```bash
 ./scripts/r1pro_task_scene_videos.sh

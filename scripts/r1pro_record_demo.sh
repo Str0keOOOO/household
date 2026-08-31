@@ -16,8 +16,8 @@ export OMNI_KIT_ACCEPT_EULA=YES
 export OMNIGIBSON_HEADLESS=1
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-mkdir -p "$HOUSEHOLD_ROOT/runs"
-output="$HOUSEHOLD_ROOT/runs/r1pro-behavior-$timestamp.mp4"
-log_file="$HOUSEHOLD_ROOT/runs/r1pro-record-$timestamp.log"
+mkdir -p "$HOUSEHOLD_ROOT/runs/videos" "$HOUSEHOLD_ROOT/runs/logs"
+output="$HOUSEHOLD_ROOT/runs/videos/r1pro-behavior-$timestamp.mp4"
+log_file="$HOUSEHOLD_ROOT/runs/logs/r1pro-record-$timestamp.log"
 
 python "$HOUSEHOLD_ROOT/src/r1pro_record_demo.py" --output "$output" "$@" 2>&1 | tee "$log_file"

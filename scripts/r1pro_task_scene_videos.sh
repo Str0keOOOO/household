@@ -15,8 +15,9 @@ conda activate behavior
 export OMNI_KIT_ACCEPT_EULA=YES
 export OMNIGIBSON_HEADLESS=1
 
-output_dir="$HOUSEHOLD_ROOT/runs/task_scene_videos"
-mkdir -p "$output_dir"
+video_dir="$HOUSEHOLD_ROOT/runs/videos/task_scene"
+log_dir="$HOUSEHOLD_ROOT/runs/logs/task_scene"
+mkdir -p "$video_dir" "$log_dir"
 
 # The three pre-sampled instances below exist locally. Other requested tasks
 # are attempted through BEHAVIOR's official online object-sampling path.
@@ -51,8 +52,8 @@ for index in "${!tasks[@]}"; do
     esac
 
     number="$(printf '%02d' "$((index + 1))")"
-    output="$output_dir/${number}-${task}.mp4"
-    log="$output_dir/${number}-${task}.log"
+    output="$video_dir/${number}-${task}.mp4"
+    log="$log_dir/${number}-${task}.log"
 
     printf '\n[%s/%s] task=%s scene=%s online=%s\n' \
         "$((index + 1))" "${#tasks[@]}" "$task" "$scene" "${online_flag[*]:-false}" | tee "$log"
