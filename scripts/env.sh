@@ -20,4 +20,3 @@ if [[ -z "${OMNIGIBSON_GPU_ID:-}" ]]; then
 fi
 
 mkdir -p "$CONDA_ENVS_PATH" "$CONDA_PKGS_DIRS" "$OMNIGIBSON_DATA_PATH"
-mkdir -p "$HOUSEHOLD_ROOT/records/runtime"

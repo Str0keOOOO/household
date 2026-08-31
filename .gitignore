@@ -2,9 +2,6 @@
 data/
 runs/
 
-# Generated, machine-specific records are retained locally but not committed.
-records/runtime/
-
 # Python and editor by-products.
 __pycache__/
 *.py[cod]

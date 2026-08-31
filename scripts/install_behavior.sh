@@ -31,9 +31,6 @@ export PATH="$ANACONDA_PREFIX/bin:$PATH"
 export CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
 export OMNI_KIT_ACCEPT_EULA=YES
 
-timestamp="$(date -u +%Y%m%dT%H%M%SZ)"
-log_file="$HOUSEHOLD_ROOT/records/runtime/install-$timestamp.log"
-
 # Keep the large core install and the licensed-data transfer as explicit stages.
 # Besides making an interrupted data download resumable, this lets us add HTTPX
 # SOCKS support inside the isolated environment when the host exposes a SOCKS
@@ -45,10 +42,10 @@ if [[ -d "$CONDA_ENVS_PATH/behavior" ]]; then
         printf 'Existing local behavior environment is incomplete; refusing to overwrite it.\n' >&2
         exit 1
     fi
-    printf 'Reusing existing local behavior environment for the dataset stage.\n' | tee "$log_file"
+    printf 'Reusing existing local behavior environment for the dataset stage.\n'
 else
     pushd "$BEHAVIOR_ROOT" >/dev/null
-    ./setup.sh --new-env --omnigibson --bddl --accept-conda-tos --accept-nvidia-eula 2>&1 | tee "$log_file"
+    ./setup.sh --new-env --omnigibson --bddl --accept-conda-tos --accept-nvidia-eula
     popd >/dev/null
     conda activate behavior
 fi
@@ -62,13 +59,12 @@ for proxy_value in "${ALL_PROXY:-}" "${all_proxy:-}" "${HTTPS_PROXY:-}" "${https
 done
 
 if [[ "$uses_socks_proxy" == true ]] && ! python -c 'import socksio' >/dev/null 2>&1; then
-    printf 'Installing local HTTPX SOCKS support for the configured proxy.\n' | tee -a "$log_file"
-    python -m pip install 'httpx[socks]' 2>&1 | tee -a "$log_file"
+    printf 'Installing local HTTPX SOCKS support for the configured proxy.\n'
+    python -m pip install 'httpx[socks]'
 fi
 
 pushd "$BEHAVIOR_ROOT" >/dev/null
-./setup.sh --dataset --accept-dataset-tos 2>&1 | tee -a "$log_file"
+./setup.sh --dataset --accept-dataset-tos
 popd >/dev/null
 
-"$SCRIPT_DIR/capture_versions.sh"
-printf 'Installation completed. Log: %s\n' "$log_file"
+printf 'Installation completed.\n'

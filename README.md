@@ -13,7 +13,6 @@ licensed assets, and run examples.
 ├── third_party/BEHAVIOR-1K/   # Unmodified upstream Git submodule
 ├── scripts/                   # Isolated setup, preflight, run, and record helpers
 ├── docs/                      # Decisions, sources, resources, and operating notes
-├── records/                   # Human-maintained activity and preflight records
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
 └── runs/                      # Demo logs and output (ignored by Git)
@@ -75,6 +74,5 @@ behalf. See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using it.
 
 Installation is complete. The finite, headless smoke tests for both the official
 quickstart and the bundled R1Pro BEHAVIOR task completed successfully on 2026-08-31
-with an unmodified upstream submodule. The environment was subsequently migrated
-to the standard Anaconda location; [records/ACTIVITY.md](records/ACTIVITY.md) is the
-append-only summary of work.
+with an unmodified upstream submodule. The environment is at the standard Anaconda
+location.
