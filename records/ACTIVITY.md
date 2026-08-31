@@ -49,3 +49,17 @@
   Isaac Sim and OmniGibson imports, and confirmed the local setup and launch
   wrappers activate that environment. Removed the superseded 15 GB
   `envs/behavior`, local Miniforge, and its installer from this workspace.
+- At the user's request, initialized Anaconda for Bash with `conda init bash`.
+  This adds Anaconda's managed hook to `/home/xuchenfei/.bashrc`, so a new shell
+  can directly run `conda activate behavior`.
+- Restored third-party runtime caches to their upstream user-level defaults by
+  removing workspace overrides for XDG, temporary, pip, Hugging Face, PyTorch,
+  CUDA, and Matplotlib locations. OmniGibson app data now follows its upstream
+  default at `third_party/BEHAVIOR-1K/OmniGibson/appdata/` (which upstream
+  ignores). The old workspace cache directories were then removed; licensed
+  BEHAVIOR assets in `data/`, the local license marker, and run records were
+  retained.
+- At the user's request, removed the local `.state/` license marker and the
+  corresponding launcher checks. License acceptance remains an explicit option
+  only for the install command; launching an already-installed environment no
+  longer depends on workspace-specific state.

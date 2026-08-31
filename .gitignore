@@ -1,9 +1,4 @@
-# Project-local data, caches, and runtime output. None of these are source.
-.cache/
-.omnigibson/
-.state/
-.tmp/
-.xdg/
+# Project-local data and runtime output. None of these are source.
 data/
 runs/
 

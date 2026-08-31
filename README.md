@@ -16,15 +16,17 @@ licensed assets, and run examples.
 ├── records/                   # Human-maintained activity and preflight records
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
-├── .cache/, .tmp/             # Project-local cache and temporary data (ignored by Git)
 └── runs/                      # Demo logs and output (ignored by Git)
 ```
 
 Only source, scripts, documentation, configuration templates, and Git submodule
 pointers are version-controlled. The Anaconda Distribution and the `behavior`
-environment are intentionally held at `/home/xuchenfei/anaconda3`; project data,
-caches, encrypted BEHAVIOR assets, decryption keys, and generated output are
-excluded from Git.
+environment are intentionally held at `/home/xuchenfei/anaconda3`; encrypted
+BEHAVIOR assets, decryption keys, and generated output are excluded from Git.
+Isaac Sim's shared cache, pip, PyTorch, CUDA, and other general third-party
+caches follow their normal user-level locations. OmniGibson app data follows its
+upstream default at `third_party/BEHAVIOR-1K/OmniGibson/appdata/`, which the
+upstream submodule itself ignores.
 
 ## Version policy
 
@@ -64,9 +66,10 @@ behalf. See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using it.
   in this repository outside that path.
 - Do not commit downloaded datasets, decryption keys, environments, caches, or
   generated output. The dataset license also prohibits redistribution.
-- Do not modify global Git, Pip, shell, OS, or driver configuration. The only
-  intentional user-level location is Anaconda at `/home/xuchenfei/anaconda3`, using
-  its standard `envs/behavior` environment path.
+- Do not modify global Git, Pip, OS, or driver configuration. Anaconda is at
+  `/home/xuchenfei/anaconda3`, using its standard `envs/behavior` environment
+  path. At the user's request, its standard `conda init bash` hook is present in
+  `/home/xuchenfei/.bashrc` so new Bash shells can use `conda activate behavior`.
 
 ## Current status
 

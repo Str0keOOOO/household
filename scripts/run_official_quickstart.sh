@@ -5,11 +5,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 source "$SCRIPT_DIR/env.sh"
 
-license_marker="$HOUSEHOLD_ROOT/.state/licenses-accepted-v3.7.2"
-if [[ ! -f "$license_marker" ]]; then
-    printf 'Run ./setup.sh install --accept-licenses before launching Isaac Sim.\n' >&2
-    exit 1
-fi
 if [[ ! -x "$ANACONDA_PREFIX/bin/conda" ]]; then
     printf 'Anaconda environment is missing.\n' >&2
     exit 1

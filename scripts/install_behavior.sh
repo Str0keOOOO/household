@@ -70,6 +70,5 @@ pushd "$BEHAVIOR_ROOT" >/dev/null
 ./setup.sh --dataset --accept-dataset-tos 2>&1 | tee -a "$log_file"
 popd >/dev/null
 
-printf '%s\n' 'accepted via ./setup.sh install --accept-licenses' > "$HOUSEHOLD_ROOT/.state/licenses-accepted-v3.7.2"
 "$SCRIPT_DIR/capture_versions.sh"
 printf 'Installation completed. Log: %s\n' "$log_file"
