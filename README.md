@@ -55,6 +55,19 @@ Conda terms, NVIDIA Isaac Sim EULA, and BEHAVIOR dataset license on the caller's
 behalf. The daily upstream commands and their optional local wrappers are listed
 in [scripts/README.md](scripts/README.md).
 
+## WebRTC 实时观看
+
+以下是旧版 Isaac Sim 的浏览器客户端地址，按要求保留作参考；它**不适用于当前
+Isaac Sim 4.5 安装**，不可将其视为可用服务：
+
+<http://10.184.17.155:8211/streaming/webrtc-client?server=10.184.17.155>
+
+当前 Isaac Sim 4.5 官方推荐使用桌面版 *Isaac Sim WebRTC Streaming Client*，而非
+浏览器页面。此服务器实际运行网卡地址为 `10.184.17.151`。BEHAVIOR-1K v3.7.2 的
+远程串流代码仍请求旧扩展 `omni.services.streamclient.webrtc`，与 Isaac Sim 4.5 的
+`omni.kit.livestream.webrtc` 不兼容；需要本仓库增加兼容启动器后，才能使用官方桌面
+客户端连接。
+
 ## Repository rules
 
 - External source repositories belong under `third_party/` and are Git submodules.
