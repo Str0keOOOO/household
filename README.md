@@ -48,6 +48,8 @@ cd /data6/xuchenfei/household
 # Finite, non-interactive verification (safe on this headless server):
 ./scripts/official_quickstart.sh --smoke
 ./scripts/r1pro_behavior_demo.sh --smoke
+# 在无桌面服务器生成可下载观看的 MP4：
+./scripts/r1pro_record_demo.sh
 ```
 
 `install --accept-licenses` is intentionally an explicit opt-in: it accepts the
@@ -67,6 +69,19 @@ Isaac Sim 4.5 安装**，不可将其视为可用服务：
 远程串流代码仍请求旧扩展 `omni.services.streamclient.webrtc`，与 Isaac Sim 4.5 的
 `omni.kit.livestream.webrtc` 不兼容；需要本仓库增加兼容启动器后，才能使用官方桌面
 客户端连接。
+
+## 无桌面录像
+
+若只需稳定地观察或留存一次运行，不必配置远程串流：
+
+```bash
+./scripts/r1pro_record_demo.sh
+```
+
+该本地启动器沿用上游 R1 Pro BEHAVIOR 示例的预采样场景、任务配置和相机位姿，在
+无界面模式将 viewer camera 输出写入忽略的 `runs/r1pro-behavior-<UTC 时间>.mp4`。
+它不会修改 `third_party/BEHAVIOR-1K/`。可用 `--steps 40 --frame-stride 2` 缩短演示，
+或用 `--width 640 --height 360` 控制分辨率。
 
 ## Repository rules
 
