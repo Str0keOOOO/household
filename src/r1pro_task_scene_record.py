@@ -1,0 +1,164 @@
+#!/usr/bin/env python3
+"""Record an initialized BEHAVIOR task scene with R1 Pro, without robot actions."""
+
+from __future__ import annotations
+
+import argparse
+import os
+from pathlib import Path
+
+# OmniGibson reads this macro when imported.
+os.environ.setdefault("OMNIGIBSON_HEADLESS", "1")
+
+import imageio.v2 as imageio
+import numpy as np
+import torch as th
+import yaml
+
+import omnigibson as og
+from omnigibson.macros import gm
+from omnigibson.utils.transform_utils import mat2quat
+
+
+# A small camera orbit, relative to the R1 Pro and task-object centroid.
+CAMERA_OFFSETS = np.array(
+    [
+        [3.00, 3.00, 2.20],
+        [3.30, 2.65, 2.10],
+        [2.70, 3.35, 2.30],
+    ],
+    dtype=np.float32,
+)
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Record an initialized R1 Pro BEHAVIOR task scene; no robot action is sent."
+    )
+    parser.add_argument("--task", required=True, help="Canonical BEHAVIOR activity name")
+    parser.add_argument("--scene", required=True, help="OmniGibson scene model name")
+    parser.add_argument("--output", required=True, type=Path, help="MP4 path to create")
+    parser.add_argument(
+        "--online-object-sampling",
+        action="store_true",
+        help="Create task objects online instead of loading a pre-sampled task instance",
+    )
+    parser.add_argument("--frames", type=int, default=30, help="Frames to record (default: 30)")
+    parser.add_argument("--fps", type=int, default=10, help="Output FPS (default: 10)")
+    parser.add_argument("--width", type=int, default=640, help="Viewer width (default: 640)")
+    parser.add_argument("--height", type=int, default=360, help="Viewer height (default: 360)")
+    args = parser.parse_args()
+    for name in ("frames", "fps", "width", "height"):
+        if getattr(args, name) <= 0:
+            parser.error(f"--{name} must be positive")
+    if args.output.suffix.lower() != ".mp4":
+        parser.error("--output must end in .mp4")
+    return args
+
+
+def frame_from_camera(camera) -> np.ndarray:
+    frame = camera.get_obs()[0]["rgb"][:, :, :3]
+    if hasattr(frame, "detach"):
+        frame = frame.detach().cpu().numpy()
+    return np.asarray(frame, dtype=np.uint8)
+
+
+def interpolate_camera_offset(frame_index: int, total_frames: int) -> np.ndarray:
+    """Interpolate the three overview offsets into one slow deterministic orbit."""
+    progress = 0.0 if total_frames <= 1 else frame_index / (total_frames - 1)
+    scaled = progress * (len(CAMERA_OFFSETS) - 1)
+    low = min(int(scaled), len(CAMERA_OFFSETS) - 2)
+    blend = scaled - low
+    return (1.0 - blend) * CAMERA_OFFSETS[low] + blend * CAMERA_OFFSETS[low + 1]
+
+
+def to_numpy(value) -> np.ndarray:
+    if hasattr(value, "detach"):
+        value = value.detach().cpu().numpy()
+    return np.asarray(value, dtype=np.float32)
+
+
+def task_view_target(env) -> tuple[np.ndarray, list[str]]:
+    """Frame the robot together with the instantiated, non-system task objects."""
+    robot_position, _ = env.robots[0].get_position_orientation()
+    positions = [to_numpy(robot_position)]
+    object_names = []
+
+    for entity in env.task.object_scope.values():
+        if not entity.exists or entity.is_system:
+            continue
+        try:
+            position, _ = entity.wrapped_obj.get_position_orientation()
+        except (AttributeError, RuntimeError):
+            continue
+        positions.append(to_numpy(position))
+        object_names.append(entity.name or entity.bddl_inst)
+
+    # A median remains useful if a task includes one distant fixture such as a fridge.
+    target = np.median(np.stack(positions), axis=0)
+    target[2] += 0.75
+    return target, object_names
+
+
+def look_at_quaternion(camera_position: np.ndarray, target: np.ndarray) -> np.ndarray:
+    """Return an [x, y, z, w] camera quaternion looking from position to target."""
+    forward = target - camera_position
+    forward /= np.linalg.norm(forward)
+    world_up = np.array([0.0, 0.0, 1.0], dtype=np.float32)
+    right = np.cross(forward, world_up)
+    right /= np.linalg.norm(right)
+    up = np.cross(right, forward)
+    rotation = np.column_stack((right, up, -forward))
+    return to_numpy(mat2quat(th.tensor(rotation, dtype=th.float32)))
+
+
+def main() -> None:
+    args = parse_args()
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+
+    gm.ENABLE_OBJECT_STATES = True
+    gm.USE_GPU_DYNAMICS = False
+
+    config_path = Path(og.example_config_path) / "r1pro_behavior.yaml"
+    with config_path.open("r", encoding="utf-8") as file:
+        config = yaml.safe_load(file)
+
+    config["scene"]["scene_model"] = args.scene
+    config["task"]["activity_name"] = args.task
+    config["task"]["activity_definition_id"] = 0
+    config["task"]["activity_instance_id"] = 0
+    config["task"]["online_object_sampling"] = args.online_object_sampling
+    config["task"]["use_presampled_robot_pose"] = not args.online_object_sampling
+    config["render"]["viewer_width"] = args.width
+    config["render"]["viewer_height"] = args.height
+
+    env = None
+    writer = None
+    try:
+        env = og.Environment(configs=config)
+        env.reset()
+        camera = og.sim.viewer_camera
+        target, object_names = task_view_target(env)
+        print(f"Task camera target={target.tolist()} objects={object_names}")
+        writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
+        for index in range(args.frames):
+            position = target + interpolate_camera_offset(index, args.frames)
+            camera.set_position_orientation(
+                position=position, orientation=look_at_quaternion(position, target)
+            )
+            og.sim.render()
+            writer.append_data(frame_from_camera(camera))
+    finally:
+        if writer is not None:
+            writer.close()
+        if env is not None:
+            og.shutdown()
+
+    print(
+        f"Saved task scene video: task={args.task} scene={args.scene} "
+        f"online_object_sampling={args.online_object_sampling} output={args.output}"
+    )
+
+
+if __name__ == "__main__":
+    main()

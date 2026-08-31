@@ -83,8 +83,6 @@ def main() -> None:
         camera = og.sim.viewer_camera
         camera.set_position_orientation(position=CAMERA_POSITION, orientation=CAMERA_ORIENTATION)
 
-        # Preserve the requested 16:9 render dimensions.  FFmpeg pads internally
-        # as needed, while the MP4 display dimensions remain e.g. 640x360.
         writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
         env.reset()
         og.sim.render()

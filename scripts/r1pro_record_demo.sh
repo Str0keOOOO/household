@@ -20,4 +20,4 @@ mkdir -p "$HOUSEHOLD_ROOT/runs"
 output="$HOUSEHOLD_ROOT/runs/r1pro-behavior-$timestamp.mp4"
 log_file="$HOUSEHOLD_ROOT/runs/r1pro-record-$timestamp.log"
 
-python "$SCRIPT_DIR/r1pro_record_demo.py" --output "$output" "$@" 2>&1 | tee "$log_file"
+python "$HOUSEHOLD_ROOT/src/r1pro_record_demo.py" --output "$output" "$@" 2>&1 | tee "$log_file"

@@ -12,7 +12,11 @@ scripts/
 ├── official_quickstart.sh          # 官方键盘控制示例的包装器
 ├── r1pro_behavior_demo.sh          # 官方 R1 Pro BEHAVIOR 示例的包装器
 ├── r1pro_record_demo.sh            # 无桌面录制 R1 Pro 示例为 MP4 的启动器
-└── r1pro_record_demo.py            # 上述启动器使用的本地录像逻辑
+└── r1pro_task_scene_videos.sh      # 批量录制 BEHAVIOR 任务初始化场景
+
+src/
+├── r1pro_record_demo.py            # r1pro_record_demo.sh 调用的本地录像逻辑
+└── r1pro_task_scene_record.py      # r1pro_task_scene_videos.sh 调用的录像逻辑
 ```
 
 ## 日常使用
@@ -51,7 +55,22 @@ conda activate behavior
 ./scripts/r1pro_record_demo.sh --steps 40 --fps 10 --frame-stride 2 --width 640 --height 360
 ```
 
-录像逻辑是本地集成代码，不改动上游示例；生成的视频和日志均被 Git 忽略。
+录像 Python 实现在 `src/r1pro_record_demo.py`；它是本地集成代码，不改动上游示例。
+生成的视频和日志均被 Git 忽略。
+
+## 批量任务场景视频
+
+以下命令生成 11 个任务的初始化场景视频，并全部保存至
+`runs/task_scene_videos/`：
+
+```bash
+./scripts/r1pro_task_scene_videos.sh
+```
+
+视频只展示加载后的 R1 Pro、房间与任务物体，没有发送机器人动作，也不表示机器人
+完成了任务。Python 实现位于 `src/r1pro_task_scene_record.py`。三个已安装预采样任务
+实例直接加载；其余任务尝试 BEHAVIOR 的在线物体采样，失败会保留在同目录的同名
+`.log` 文件并继续处理下一项。
 
 ## 相关上游脚本
 

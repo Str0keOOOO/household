@@ -11,7 +11,8 @@ licensed assets, and run examples.
 ```text
 .
 ├── third_party/BEHAVIOR-1K/   # Unmodified upstream Git submodule
-├── scripts/                   # Local setup, diagnostic, and demo helpers
+├── scripts/                   # Local shell setup, diagnostic, and demo launchers
+├── src/                       # Local Python implementations called by scripts
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
 └── runs/                      # Demo logs and output (ignored by Git)
@@ -50,6 +51,8 @@ cd /data6/xuchenfei/household
 ./scripts/r1pro_behavior_demo.sh --smoke
 # 在无桌面服务器生成可下载观看的 MP4：
 ./scripts/r1pro_record_demo.sh
+# 批量生成 11 个任务的初始化场景视频：
+./scripts/r1pro_task_scene_videos.sh
 ```
 
 `install --accept-licenses` is intentionally an explicit opt-in: it accepts the
