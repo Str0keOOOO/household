@@ -28,10 +28,10 @@ report="$HOUSEHOLD_ROOT/records/runtime/environment-$timestamp.md"
     fi
     printf '```\n\n'
 
-    if [[ -x "$MINIFORGE_PREFIX/bin/conda" ]]; then
-        source "$MINIFORGE_PREFIX/etc/profile.d/conda.sh"
+    if [[ -x "$ANACONDA_PREFIX/bin/conda" ]]; then
+        source "$ANACONDA_PREFIX/etc/profile.d/conda.sh"
         if [[ -d "$CONDA_ENVS_PATH/behavior" ]]; then
-            conda activate "$CONDA_ENVS_PATH/behavior"
+            conda activate behavior
             printf '## Python environment\n\n```text\n'
             python --version
             python -m pip --version

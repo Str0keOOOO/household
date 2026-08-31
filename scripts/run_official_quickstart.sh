@@ -10,13 +10,13 @@ if [[ ! -f "$license_marker" ]]; then
     printf 'Run ./setup.sh install --accept-licenses before launching Isaac Sim.\n' >&2
     exit 1
 fi
-if [[ ! -x "$MINIFORGE_PREFIX/bin/conda" ]]; then
-    printf 'Local environment is missing.\n' >&2
+if [[ ! -x "$ANACONDA_PREFIX/bin/conda" ]]; then
+    printf 'Anaconda environment is missing.\n' >&2
     exit 1
 fi
 
-source "$MINIFORGE_PREFIX/etc/profile.d/conda.sh"
-conda activate "$CONDA_ENVS_PATH/behavior"
+source "$ANACONDA_PREFIX/etc/profile.d/conda.sh"
+conda activate behavior
 export OMNI_KIT_ACCEPT_EULA=YES
 
 timestamp="$(date -u +%Y%m%dT%H%M%SZ)"

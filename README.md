@@ -1,9 +1,9 @@
 # Household robotics simulation workspace
 
-This repository is the isolated, reproducible workspace for installing and exercising
+This repository is the reproducible workspace for installing and exercising
 BEHAVIOR-1K / OmniGibson for household-service-robot simulation. It is deliberately
 an integration repository: upstream source is preserved as a Git submodule, while
-local scripts and documentation describe how to create an environment, download
+local scripts configure the standard per-user Anaconda environment, download
 licensed assets, and run examples.
 
 ## Layout
@@ -16,15 +16,15 @@ licensed assets, and run examples.
 ├── records/                   # Human-maintained activity and preflight records
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
-├── envs/                      # Conda environments (ignored by Git)
-├── .conda/, .cache/, .tmp/    # Package/cache/temp data (ignored by Git)
+├── .cache/, .tmp/             # Project-local cache and temporary data (ignored by Git)
 └── runs/                      # Demo logs and output (ignored by Git)
 ```
 
 Only source, scripts, documentation, configuration templates, and Git submodule
-pointers are version-controlled. Conda environments, Isaac Sim packages, caches,
-encrypted BEHAVIOR data, decryption keys, and generated output are intentionally
-excluded from Git and remain under this directory.
+pointers are version-controlled. The Anaconda Distribution and the `behavior`
+environment are intentionally held at `/home/xuchenfei/anaconda3`; project data,
+caches, encrypted BEHAVIOR assets, decryption keys, and generated output are
+excluded from Git.
 
 ## Version policy
 
@@ -35,8 +35,7 @@ Isaac Sim 4.5. Isaac Sim 4.5 officially supports Ubuntu 20.04 and the observed
 NVIDIA driver version. Newer BEHAVIOR v3.9.2 uses Isaac Sim 5.1, whose official
 platform support starts at Ubuntu 22.04; it is deliberately not forced here.
 
-Exact version observations and links are in [versions.lock](versions.lock) and
-[docs/SOURCES.md](docs/SOURCES.md).
+Exact version observations are in [versions.lock](versions.lock).
 
 ## Normal workflow
 
@@ -65,15 +64,14 @@ behalf. See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using it.
   in this repository outside that path.
 - Do not commit downloaded datasets, decryption keys, environments, caches, or
   generated output. The dataset license also prohibits redistribution.
-- Do not modify global Git, Conda, Pip, shell, OS, or driver configuration. The
-  scripts redirect supported runtime state into this workspace instead.
-- The scripts do not override the user's home directory. Any residual third-party
-  write outside the redirected locations is treated as a defect to investigate.
+- Do not modify global Git, Pip, shell, OS, or driver configuration. The only
+  intentional user-level location is Anaconda at `/home/xuchenfei/anaconda3`, using
+  its standard `envs/behavior` environment path.
 
 ## Current status
 
 Installation is complete. The finite, headless smoke tests for both the official
 quickstart and the bundled R1Pro BEHAVIOR task completed successfully on 2026-08-31
-with an unmodified upstream submodule. See [docs/DELIVERY.md](docs/DELIVERY.md)
-for the exact commands, logs, resolved versions, resource use, and caveats, and
-[records/ACTIVITY.md](records/ACTIVITY.md) for an append-only summary of work.
+with an unmodified upstream submodule. The environment was subsequently migrated
+to the standard Anaconda location; [records/ACTIVITY.md](records/ACTIVITY.md) is the
+append-only summary of work.

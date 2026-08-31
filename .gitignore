@@ -1,14 +1,10 @@
-# Local environments, data, caches, and runtime output. None of these are source.
+# Project-local data, caches, and runtime output. None of these are source.
 .cache/
-.conda/
-.downloads/
 .omnigibson/
 .state/
 .tmp/
-.tools/
 .xdg/
 data/
-envs/
 runs/
 
 # Generated, machine-specific records are retained locally but not committed.

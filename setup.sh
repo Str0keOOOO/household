@@ -10,7 +10,7 @@ Usage: ./setup.sh <command> [options]
 
 Commands:
   preflight                 Report host compatibility and available workspace space.
-  bootstrap                 Install the pinned Miniforge bootstrap under .tools/.
+  bootstrap                 Install the pinned Anaconda Distribution under ~/anaconda3.
   install --accept-licenses Create the isolated environment and install BEHAVIOR.
   all --accept-licenses     Run bootstrap followed by install.
   capture                   Write a local runtime version snapshot.
@@ -26,7 +26,7 @@ case "$command_name" in
         exec "$SCRIPT_DIR/scripts/preflight.sh"
         ;;
     bootstrap)
-        exec "$SCRIPT_DIR/scripts/bootstrap_miniforge.sh"
+        exec "$SCRIPT_DIR/scripts/bootstrap_anaconda.sh"
         ;;
     install)
         shift
@@ -34,7 +34,7 @@ case "$command_name" in
         ;;
     all)
         shift
-        "$SCRIPT_DIR/scripts/bootstrap_miniforge.sh"
+        "$SCRIPT_DIR/scripts/bootstrap_anaconda.sh"
         exec "$SCRIPT_DIR/scripts/install_behavior.sh" "$@"
         ;;
     capture)

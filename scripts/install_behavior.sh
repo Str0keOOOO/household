@@ -16,8 +16,8 @@ EOF
     exit 2
 fi
 
-if [[ ! -x "$MINIFORGE_PREFIX/bin/conda" ]]; then
-    printf 'Missing local Miniforge. Run ./setup.sh bootstrap first.\n' >&2
+if [[ ! -x "$ANACONDA_PREFIX/bin/conda" ]]; then
+    printf 'Missing Anaconda at %s. Run ./setup.sh bootstrap first.\n' "$ANACONDA_PREFIX" >&2
     exit 1
 fi
 
@@ -26,8 +26,8 @@ if [[ ! -x "$BEHAVIOR_ROOT/setup.sh" ]]; then
     exit 1
 fi
 
-source "$MINIFORGE_PREFIX/etc/profile.d/conda.sh"
-export PATH="$MINIFORGE_PREFIX/bin:$PATH"
+source "$ANACONDA_PREFIX/etc/profile.d/conda.sh"
+export PATH="$ANACONDA_PREFIX/bin:$PATH"
 export CONDA_PLUGINS_AUTO_ACCEPT_TOS=yes
 export OMNI_KIT_ACCEPT_EULA=YES
 
@@ -40,7 +40,7 @@ log_file="$HOUSEHOLD_ROOT/records/runtime/install-$timestamp.log"
 # proxy. Upstream's dataset downloader uses HTTPX and otherwise aborts before any
 # asset transfer on such hosts. No third-party source is changed.
 if [[ -d "$CONDA_ENVS_PATH/behavior" ]]; then
-    conda activate "$CONDA_ENVS_PATH/behavior"
+    conda activate behavior
     if ! python -c 'import omnigibson' >/dev/null 2>&1; then
         printf 'Existing local behavior environment is incomplete; refusing to overwrite it.\n' >&2
         exit 1
@@ -50,7 +50,7 @@ else
     pushd "$BEHAVIOR_ROOT" >/dev/null
     ./setup.sh --new-env --omnigibson --bddl --accept-conda-tos --accept-nvidia-eula 2>&1 | tee "$log_file"
     popd >/dev/null
-    conda activate "$CONDA_ENVS_PATH/behavior"
+    conda activate behavior
 fi
 
 uses_socks_proxy=false

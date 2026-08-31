@@ -34,10 +34,18 @@
   instance directories exist. These files, including the data key, remain ignored.
 - Ran the finite, headless official Fetch quickstart smoke and the finite, headless
   bundled `R1Pro` BEHAVIOR smoke on physical GPU 1. Both exited with status 0 and
-  released GPU memory afterwards. Their logs are in `runs/`; exact commands and
-  caveats are in `docs/DELIVERY.md`.
+  released GPU memory afterwards. Their logs are in `runs/`.
 - Captured a final post-test environment and GPU snapshot at
   `records/runtime/environment-20260831T053713Z.md` after GPU 1 had returned to
   its 15 MiB idle baseline.
 - Kept `third_party/BEHAVIOR-1K` clean at its pinned gitlink; no upstream source
   file was changed.
+- At the user's request, replaced the local Miniforge bootstrap with the official
+  Anaconda Distribution `2026.07-1` at `/home/xuchenfei/anaconda3`. The installer
+  SHA-256 was verified and the necessary Anaconda package-channel terms were
+  explicitly accepted.
+- Cloned the completed `behavior` environment to
+  `/home/xuchenfei/anaconda3/envs/behavior`, verified Python 3.10.21 plus
+  Isaac Sim and OmniGibson imports, and confirmed the local setup and launch
+  wrappers activate that environment. Removed the superseded 15 GB
+  `envs/behavior`, local Miniforge, and its installer from this workspace.
