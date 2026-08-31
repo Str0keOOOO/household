@@ -20,12 +20,14 @@ from omnigibson.macros import gm
 from omnigibson.utils.transform_utils import mat2quat
 
 
-# A small camera orbit, relative to the R1 Pro and task-object centroid.
+# A small third-person orbit in the R1 Pro body frame: x is forward and y is
+# left. A body-frame orbit avoids placing the viewer on the far side of a wall
+# when tasks start in different rooms of a house.
 CAMERA_OFFSETS = np.array(
     [
-        [3.00, 3.00, 2.20],
-        [3.30, 2.65, 2.10],
-        [2.70, 3.35, 2.30],
+        [-2.20, -1.20, 1.40],
+        [-2.10, -1.15, 1.35],
+        [-2.20, -1.10, 1.40],
     ],
     dtype=np.float32,
 )
@@ -78,26 +80,38 @@ def to_numpy(value) -> np.ndarray:
     return np.asarray(value, dtype=np.float32)
 
 
-def task_view_target(env) -> tuple[np.ndarray, list[str]]:
-    """Frame the robot together with the instantiated, non-system task objects."""
-    robot_position, _ = env.robots[0].get_position_orientation()
-    positions = [to_numpy(robot_position)]
+def task_view_context(env) -> tuple[np.ndarray, np.ndarray, list[str]]:
+    """Return R1 Pro pose and the instantiated non-system task-object names."""
+    robot_position, robot_orientation = env.robots[0].get_position_orientation()
     object_names = []
 
     for entity in env.task.object_scope.values():
-        if not entity.exists or entity.is_system:
+        if not entity.exists or entity.is_system or entity.wrapped_obj is env.robots[0]:
             continue
         try:
-            position, _ = entity.wrapped_obj.get_position_orientation()
+            entity.wrapped_obj.get_position_orientation()
         except (AttributeError, RuntimeError):
             continue
-        positions.append(to_numpy(position))
         object_names.append(entity.name or entity.bddl_inst)
 
-    # A median remains useful if a task includes one distant fixture such as a fridge.
-    target = np.median(np.stack(positions), axis=0)
-    target[2] += 0.75
-    return target, object_names
+    return to_numpy(robot_position), to_numpy(robot_orientation), object_names
+
+
+def third_person_camera_pose(
+    robot_position: np.ndarray, robot_orientation: np.ndarray, frame_index: int, total_frames: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a third-person camera pose that looks at R1 Pro's torso."""
+    x, y, z, w = robot_orientation
+    forward = np.array(
+        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 0.0], dtype=np.float32
+    )
+    forward /= np.linalg.norm(forward)
+    left = np.array([-forward[1], forward[0], 0.0], dtype=np.float32)
+    offset = interpolate_camera_offset(frame_index, total_frames)
+    camera_position = robot_position + forward * offset[0] + left * offset[1]
+    camera_position[2] += offset[2]
+    target = robot_position + np.array([0.0, 0.0, 1.0], dtype=np.float32)
+    return camera_position, target
 
 
 def look_at_quaternion(camera_position: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -138,15 +152,30 @@ def main() -> None:
         env = og.Environment(configs=config)
         env.reset()
         camera = og.sim.viewer_camera
-        target, object_names = task_view_target(env)
-        print(f"Task camera target={target.tolist()} objects={object_names}")
+        robot_position, robot_orientation, object_names = task_view_context(env)
+        print(
+            f"Task camera robot={robot_position.tolist()} objects={object_names}",
+            flush=True,
+        )
+
+        # The viewer sensor observes a new pose after a simulator tick. This
+        # directly follows OmniGibson's CameraMover recording utility and does
+        # not call env.step() or send a robot action.
+        initial_position, initial_target = third_person_camera_pose(
+            robot_position, robot_orientation, 0, args.frames
+        )
+        camera.set_position_orientation(
+            position=initial_position, orientation=look_at_quaternion(initial_position, initial_target)
+        )
+        og.sim.step()
+
         writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
         for index in range(args.frames):
-            position = target + interpolate_camera_offset(index, args.frames)
+            position, target = third_person_camera_pose(robot_position, robot_orientation, index, args.frames)
             camera.set_position_orientation(
                 position=position, orientation=look_at_quaternion(position, target)
             )
-            og.sim.render()
+            og.sim.step()
             writer.append_data(frame_from_camera(camera))
     finally:
         if writer is not None:
@@ -156,7 +185,8 @@ def main() -> None:
 
     print(
         f"Saved task scene video: task={args.task} scene={args.scene} "
-        f"online_object_sampling={args.online_object_sampling} output={args.output}"
+        f"online_object_sampling={args.online_object_sampling} output={args.output}",
+        flush=True,
     )
 
 
