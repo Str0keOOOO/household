@@ -46,6 +46,10 @@ cd /data6/xuchenfei/household
 ./setup.sh bootstrap
 # After explicitly accepting the listed licenses:
 ./setup.sh install --accept-licenses
+# Finite, non-interactive verification (safe on this headless server):
+./scripts/run_official_quickstart.sh --smoke
+./scripts/run_r1pro_demo.sh --smoke
+# The following two original upstream entry points require a GUI / interaction:
 ./scripts/run_official_quickstart.sh
 ./scripts/run_r1pro_demo.sh
 ```
@@ -68,5 +72,8 @@ behalf. See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using it.
 
 ## Current status
 
-See [docs/DELIVERY.md](docs/DELIVERY.md) for the current handoff state and
+Installation is complete. The finite, headless smoke tests for both the official
+quickstart and the bundled R1Pro BEHAVIOR task completed successfully on 2026-08-31
+with an unmodified upstream submodule. See [docs/DELIVERY.md](docs/DELIVERY.md)
+for the exact commands, logs, resolved versions, resource use, and caveats, and
 [records/ACTIVITY.md](records/ACTIVITY.md) for an append-only summary of work.

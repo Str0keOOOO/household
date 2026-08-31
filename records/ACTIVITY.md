@@ -23,3 +23,21 @@
   installed Conda `26.5.3` under `.tools/miniforge3`. Its package cache and
   temporary directory resolve inside this workspace; the existing user-level
   `.conda/environments.txt` predates this work and was not modified.
+- After the user explicitly accepted the Conda terms, NVIDIA Isaac Sim EULA, and
+  BEHAVIOR dataset license, installed the minimal requested stack in `envs/behavior`:
+  Python 3.10.21, PyTorch 2.6.0+cu124, BDDL 3.7.0, OmniGibson 3.7.2, and Isaac Sim
+  4.5.0.0. The initial data transfer exposed a host SOCKS proxy dependency, so the
+  local wrapper now adds `httpx[socks]` only in the isolated environment and can
+  resume the dataset stage without recreating the completed environment.
+- Downloaded the licensed robot, BEHAVIOR scene/object, and 2025 challenge-instance
+  bundles beneath `data/omnigibson`; verified the `models/r1pro` asset and task
+  instance directories exist. These files, including the data key, remain ignored.
+- Ran the finite, headless official Fetch quickstart smoke and the finite, headless
+  bundled `R1Pro` BEHAVIOR smoke on physical GPU 1. Both exited with status 0 and
+  released GPU memory afterwards. Their logs are in `runs/`; exact commands and
+  caveats are in `docs/DELIVERY.md`.
+- Captured a final post-test environment and GPU snapshot at
+  `records/runtime/environment-20260831T053713Z.md` after GPU 1 had returned to
+  its 15 MiB idle baseline.
+- Kept `third_party/BEHAVIOR-1K` clean at its pinned gitlink; no upstream source
+  file was changed.

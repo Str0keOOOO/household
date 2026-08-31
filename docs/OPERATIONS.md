@@ -44,6 +44,12 @@ It creates the isolated `behavior` environment and installs BDDL, OmniGibson,
 Isaac Sim 4.5, and the dataset assets. It deliberately omits `--joylo`, `--eval`,
 and `--primitives`, which are not needed for the requested smoke tests.
 
+The local wrapper performs the core stack and licensed-data downloads as separate
+upstream invocations. This permits a failed data transfer to resume without
+recreating the environment. If the host provides a SOCKS proxy, it adds the
+minimal `httpx[socks]` extra inside `envs/behavior` before the upstream data
+downloader is invoked; it does not alter the upstream checkout.
+
 ## License gate
 
 Passing `--accept-licenses` confirms acceptance of all of the following:
@@ -60,6 +66,11 @@ Git LFS.
 ## Examples
 
 ```bash
+# Finite, headless, non-interactive smoke tests used for server verification:
+./scripts/run_official_quickstart.sh --smoke
+./scripts/run_r1pro_demo.sh --smoke
+
+# Original upstream interactive entry points (GUI / remote display required):
 ./scripts/run_official_quickstart.sh
 ./scripts/run_r1pro_demo.sh
 ```
@@ -69,6 +80,31 @@ GUI or remote display. The second invokes the upstream `behavior_env_demo`, whos
 configuration instantiates an R1Pro in a populated BEHAVIOR task. Both scripts
 default to the preflight-selected GPU 1; set `OMNIGIBSON_GPU_ID` explicitly to
 override this choice.
+
+The `--smoke` variants are wrappers around the upstream functions, not source
+patches. They set `OMNIGIBSON_HEADLESS=1` before importing OmniGibson and exercise
+the upstream finite `short_exec` paths. The quickstart smoke uses its default
+Fetch/Rs_int configuration and 100 random-action steps because the original CLI
+is an infinite keyboard-teleoperation loop. The R1Pro smoke selects its cached
+BEHAVIOR activity and runs one 100-step iteration; this avoids the original
+interactive selection and non-deterministic online object sampling. Each smoke
+run has a 20-minute safety timeout and writes a timestamped log under `runs/`.
+
+### Multi-GPU server note
+
+On this server, `OMNIGIBSON_GPU_ID=1` was verified in the Isaac Sim log as both
+the renderer and PhysX device. OmniGibson v3.7.2 already disables multi-GPU mode.
+Isaac/Omniverse may nevertheless probe every physical GPU at process startup; when
+another user's GPU is full, this can emit non-fatal P2P `cudaErrorMemoryAllocation`
+messages. Do not replace `OMNIGIBSON_GPU_ID` with `CUDA_VISIBLE_DEVICES` for Isaac
+Sim: its Vulkan renderer is not selected by that CUDA-only mechanism. Keep the
+OmniGibson variable set to an actually idle physical GPU and verify it with
+`nvidia-smi` before launching.
+
+The first cold start on 2026-08-31 spent several minutes compiling RTX shader/PSO
+cache inside `.omnigibson`; later starts were substantially faster. Headless GLFW,
+OmniHub, DLSS low-resolution, and some upstream deprecation warnings were observed
+but did not prevent either example from completing.
 
 ## Updating later
 

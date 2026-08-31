@@ -9,4 +9,5 @@ All version and compatibility decisions were checked on 2026-08-31.
 - [Current BEHAVIOR examples guide](https://behavior.stanford.edu/getting_started/examples.html)
 - [Isaac Sim 4.5 requirements](https://docs.isaacsim.omniverse.nvidia.com/4.5.0/installation/requirements.html)
 - [Isaac Sim 5.1 requirements](https://docs.isaacsim.omniverse.nvidia.com/5.1.0/installation/requirements.html)
+- [Omniverse Linux GPU-selection troubleshooting](https://docs.omniverse.nvidia.com/dev-guide/latest/linux-troubleshooting.html#q9-how-to-specify-what-gpus-to-run-omniverse-apps-on)
 - [Miniforge 26.5.3-0 release](https://github.com/conda-forge/miniforge/releases/tag/26.5.3-0)
