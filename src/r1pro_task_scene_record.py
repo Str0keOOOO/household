@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
 from pathlib import Path
 
@@ -126,6 +127,75 @@ def look_at_quaternion(camera_position: np.ndarray, target: np.ndarray) -> np.nd
     return to_numpy(mat2quat(th.tensor(rotation, dtype=th.float32)))
 
 
+def online_task_config(args: argparse.Namespace) -> tuple[dict, list[str] | None]:
+    """Build the task configuration used by OmniGibson's official sampler."""
+    whitelist = None
+    blacklist = None
+    room_types = None
+    behavior_root = os.environ.get("BEHAVIOR_ROOT")
+    if behavior_root:
+        list_path = Path(behavior_root) / "OmniGibson" / "omnigibson" / "sampling" / "task_custom_lists.json"
+        if list_path.is_file():
+            custom_lists = json.loads(list_path.read_text(encoding="utf-8"))
+            task_settings = custom_lists.get(args.task, {})
+            if isinstance(task_settings, dict):
+                room_types = task_settings.get("room_types")
+                scene_settings = task_settings.get(args.scene, {})
+                if isinstance(scene_settings, dict):
+                    whitelist = scene_settings.get("whitelist")
+                    blacklist = scene_settings.get("blacklist")
+
+    task_config = {
+        "type": "BehaviorTask",
+        "activity_name": args.task,
+        "activity_definition_id": 0,
+        "activity_instance_id": 0,
+        "online_object_sampling": True,
+        "use_presampled_robot_pose": False,
+        "sampling_whitelist": whitelist,
+        "sampling_blacklist": blacklist,
+    }
+    return task_config, room_types
+
+
+def create_online_sampling_environment(config: dict, args: argparse.Namespace):
+    """Create and sample a task using OmniGibson's documented two-stage flow."""
+    task_config, room_types = online_task_config(args)
+    config.pop("task", None)
+    config["scene"]["load_room_types"] = room_types
+    config["robots"][0]["obs_modalities"] = []
+    config["robots"][0]["default_reset_mode"] = "untuck"
+    config["robots"][0]["position"] = [-50.0, -50.0, -50.0]
+
+    # sample_b1k_tasks.py enables transition rules only while the base scene is
+    # created, then dynamically attaches the BehaviorTask while simulation is
+    # stopped. Loading it directly as an environment task leaves unpopulated
+    # BDDL entities in the initial observation space.
+    with gm.unlocked():
+        gm.ENABLE_TRANSITION_RULES = True
+        try:
+            env = og.Environment(configs=config)
+        finally:
+            gm.ENABLE_TRANSITION_RULES = False
+
+    for obj in env.scene.objects:
+        obj.keep_still()
+    env.scene.update_initial_file()
+    og.sim.stop()
+
+    env.task_config.clear()
+    env.task_config.update(task_config)
+    env._load_task()
+    if env.task.feedback is not None:
+        raise RuntimeError(f"Online sampling rejected {args.task}: {env.task.feedback}")
+
+    og.sim.play()
+    env.task.reset(env)
+    for _ in range(4):
+        og.sim.step()
+    return env
+
+
 def main() -> None:
     args = parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -138,19 +208,22 @@ def main() -> None:
         config = yaml.safe_load(file)
 
     config["scene"]["scene_model"] = args.scene
-    config["task"]["activity_name"] = args.task
-    config["task"]["activity_definition_id"] = 0
-    config["task"]["activity_instance_id"] = 0
-    config["task"]["online_object_sampling"] = args.online_object_sampling
-    config["task"]["use_presampled_robot_pose"] = not args.online_object_sampling
     config["render"]["viewer_width"] = args.width
     config["render"]["viewer_height"] = args.height
 
     env = None
     writer = None
     try:
-        env = og.Environment(configs=config)
-        env.reset()
+        if args.online_object_sampling:
+            env = create_online_sampling_environment(config=config, args=args)
+        else:
+            config["task"]["activity_name"] = args.task
+            config["task"]["activity_definition_id"] = 0
+            config["task"]["activity_instance_id"] = 0
+            config["task"]["online_object_sampling"] = False
+            config["task"]["use_presampled_robot_pose"] = True
+            env = og.Environment(configs=config)
+            env.reset()
         camera = og.sim.viewer_camera
         robot_position, robot_orientation, object_names = task_view_context(env)
         print(
