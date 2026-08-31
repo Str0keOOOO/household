@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/../env.sh"
+source "$SCRIPT_DIR/env.sh"
 
 if [[ ! -x "$ANACONDA_PREFIX/bin/conda" ]]; then
     printf 'Anaconda environment is missing.\n' >&2

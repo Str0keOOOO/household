@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/../env.sh"
+source "$SCRIPT_DIR/env.sh"
 
 if [[ "${1:-}" != "--accept-licenses" || "$#" -ne 1 ]]; then
     cat <<'EOF' >&2

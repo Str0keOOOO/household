@@ -46,8 +46,8 @@ cd /data6/xuchenfei/household
 # After explicitly accepting the listed licenses:
 ./setup.sh install --accept-licenses
 # Finite, non-interactive verification (safe on this headless server):
-./scripts/run/official_quickstart.sh --smoke
-./scripts/run/r1pro_behavior_demo.sh --smoke
+./scripts/official_quickstart.sh --smoke
+./scripts/r1pro_behavior_demo.sh --smoke
 ```
 
 `install --accept-licenses` is intentionally an explicit opt-in: it accepts the

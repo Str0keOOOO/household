@@ -6,14 +6,11 @@ BEHAVIOR-1K 源码始终位于 `../third_party/BEHAVIOR-1K/` 子模块。
 ```text
 scripts/
 ├── env.sh                         # 共用环境变量：数据、Anaconda、源码与 GPU
-├── setup/
-│   ├── bootstrap_anaconda.sh       # 安装锁定版本的 Anaconda
-│   └── install_behavior.sh         # 调用上游安装器并下载许可数据
-├── run/
-│   ├── official_quickstart.sh      # 官方键盘控制示例的包装器
-│   └── r1pro_behavior_demo.sh      # 官方 R1 Pro BEHAVIOR 示例的包装器
-└── tools/
-    └── preflight.sh                # 只读的服务器与 GPU 检查
+├── bootstrap_anaconda.sh           # 安装锁定版本的 Anaconda
+├── install_behavior.sh             # 调用上游安装器并下载许可数据
+├── preflight.sh                    # 只读的服务器与 GPU 检查
+├── official_quickstart.sh          # 官方键盘控制示例的包装器
+└── r1pro_behavior_demo.sh          # 官方 R1 Pro BEHAVIOR 示例的包装器
 ```
 
 ## 日常使用
@@ -28,8 +25,8 @@ conda activate behavior
 
 | 目标 | 上游原始入口 | 本地可选包装器 |
 | --- | --- | --- |
-| 键盘控制机器人 | `python -m omnigibson.examples.robots.robot_control_example --quickstart` | `./scripts/run/official_quickstart.sh` |
-| R1 Pro BEHAVIOR 任务 | `python -m omnigibson.examples.environments.behavior_env_demo` | `./scripts/run/r1pro_behavior_demo.sh` |
+| 键盘控制机器人 | `python -m omnigibson.examples.robots.robot_control_example --quickstart` | `./scripts/official_quickstart.sh` |
+| R1 Pro BEHAVIOR 任务 | `python -m omnigibson.examples.environments.behavior_env_demo` | `./scripts/r1pro_behavior_demo.sh` |
 | 有限无头验证 | 无；上游示例是交互式的 | 两个包装器均可加 `--smoke` |
 
 包装器不会改动上游源码；它们只负责激活环境、设置本工作区数据路径，并将运行
