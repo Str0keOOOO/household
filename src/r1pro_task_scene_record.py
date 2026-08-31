@@ -21,17 +21,39 @@ from omnigibson.macros import gm
 from omnigibson.utils.transform_utils import mat2quat
 
 
-# A small third-person orbit in the R1 Pro body frame: x is forward and y is
-# left. A body-frame orbit avoids placing the viewer on the far side of a wall
-# when tasks start in different rooms of a house.
-CAMERA_OFFSETS = np.array(
-    [
-        [-2.20, -1.20, 1.40],
-        [-2.10, -1.15, 1.35],
-        [-2.20, -1.10, 1.40],
-    ],
-    dtype=np.float32,
-)
+# Camera offsets use an object's body frame: x is forward and y is left.  The
+# recording intentionally contains three short static views (R1 Pro, the
+# main fixture, and the smaller task objects) rather than an action rollout.
+ROBOT_CAMERA_OFFSET = np.array([-2.10, -1.15, 1.35], dtype=np.float32)
+# One installed legacy template does not include R1 Pro in its robot_poses
+# metadata.  This position is the R1 Pro pose stored by a different local
+# template in the same kitchen and is used only for a static camera preview.
+FALLBACK_ROBOT_POSES = {
+    "house_single_floor": (
+        np.array([6.776428, -0.971100, 0.005005], dtype=np.float32),
+        np.array([0.0, 0.0, -0.644101, 0.764941], dtype=np.float32),
+    ),
+}
+
+# These fixture-relative offsets were calibrated against the three installed
+# legacy templates. They keep the virtual camera in a
+# visible room instead of behind the walls that surround many old fixtures.
+CALIBRATED_FOCUS_OFFSETS = {
+    "carrying_in_groceries": (
+        np.array([4.0, 0.0, 1.55], dtype=np.float32),
+        np.array([0.0, -4.0, 1.55], dtype=np.float32),
+    ),
+    "thawing_frozen_food": (
+        np.array([-4.0, 0.0, 1.55], dtype=np.float32),
+        np.array([0.0, -4.0, 1.55], dtype=np.float32),
+    ),
+    "canning_food": (
+        np.array([-4.0, 0.0, 1.55], dtype=np.float32),
+        np.array([0.0, -4.0, 1.55], dtype=np.float32),
+    ),
+}
+
+FIXTURE_CATEGORIES = {"fridge", "microwave", "oven", "countertop", "cabinet", "bottom_cabinet"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -66,53 +88,120 @@ def frame_from_camera(camera) -> np.ndarray:
     return np.asarray(frame, dtype=np.uint8)
 
 
-def interpolate_camera_offset(frame_index: int, total_frames: int) -> np.ndarray:
-    """Interpolate the three overview offsets into one slow deterministic orbit."""
-    progress = 0.0 if total_frames <= 1 else frame_index / (total_frames - 1)
-    scaled = progress * (len(CAMERA_OFFSETS) - 1)
-    low = min(int(scaled), len(CAMERA_OFFSETS) - 2)
-    blend = scaled - low
-    return (1.0 - blend) * CAMERA_OFFSETS[low] + blend * CAMERA_OFFSETS[low + 1]
-
-
 def to_numpy(value) -> np.ndarray:
     if hasattr(value, "detach"):
         value = value.detach().cpu().numpy()
     return np.asarray(value, dtype=np.float32)
 
 
-def task_view_context(env) -> tuple[np.ndarray, np.ndarray, list[str]]:
-    """Return R1 Pro pose and the instantiated non-system task-object names."""
+def task_view_context(env) -> tuple[np.ndarray, np.ndarray, list[dict]]:
+    """Return R1 Pro pose and instantiated non-system task-object context."""
     robot_position, robot_orientation = env.robots[0].get_position_orientation()
-    object_names = []
+    objects = []
 
     for entity in env.task.object_scope.values():
         if not entity.exists or entity.is_system or entity.wrapped_obj is env.robots[0]:
             continue
         try:
-            entity.wrapped_obj.get_position_orientation()
+            position, orientation = entity.wrapped_obj.get_position_orientation()
         except (AttributeError, RuntimeError):
             continue
-        object_names.append(entity.name or entity.bddl_inst)
+        wrapped = entity.wrapped_obj
+        objects.append(
+            {
+                "name": entity.name or entity.bddl_inst,
+                "category": getattr(wrapped, "category", ""),
+                "position": to_numpy(position),
+                "orientation": to_numpy(orientation),
+            }
+        )
 
-    return to_numpy(robot_position), to_numpy(robot_orientation), object_names
+    return to_numpy(robot_position), to_numpy(robot_orientation), objects
 
 
-def third_person_camera_pose(
-    robot_position: np.ndarray, robot_orientation: np.ndarray, frame_index: int, total_frames: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return a third-person camera pose that looks at R1 Pro's torso."""
-    x, y, z, w = robot_orientation
+def position_robot_for_recording(env, scene_name: str) -> str:
+    """Place R1 Pro at the saved pose, or at a verified same-scene fallback."""
+    robot = env.robots[0]
+    presampled_poses = env.scene.get_task_metadata(key="robot_poses")
+    if isinstance(presampled_poses, dict) and robot.model_name in presampled_poses:
+        pose = presampled_poses[robot.model_name][0]
+        position = to_numpy(pose["position"])
+        orientation = to_numpy(pose["orientation"])
+        source = "instance R1 Pro pose"
+    elif scene_name in FALLBACK_ROBOT_POSES:
+        position, orientation = FALLBACK_ROBOT_POSES[scene_name]
+        source = "verified same-scene fallback pose"
+    else:
+        return "configured reset pose"
+
+    robot.set_position_orientation(position=position, orientation=orientation)
+    robot.keep_still()
+    og.sim.step()
+    return source
+
+
+def planar_basis(orientation: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Return horizontal forward and left unit vectors from an [x, y, z, w] quaternion."""
+    x, y, z, w = orientation
     forward = np.array(
         [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 0.0], dtype=np.float32
     )
     forward /= np.linalg.norm(forward)
-    left = np.array([-forward[1], forward[0], 0.0], dtype=np.float32)
-    offset = interpolate_camera_offset(frame_index, total_frames)
-    camera_position = robot_position + forward * offset[0] + left * offset[1]
+    return forward, np.array([-forward[1], forward[0], 0.0], dtype=np.float32)
+
+
+def object_camera_pose(
+    target_position: np.ndarray, target_orientation: np.ndarray, offset: np.ndarray, target_height: float
+) -> tuple[np.ndarray, np.ndarray]:
+    """Return a camera pose targeting an R1 Pro or task object from its local side."""
+    forward, left = planar_basis(target_orientation)
+    camera_position = target_position + forward * offset[0] + left * offset[1]
     camera_position[2] += offset[2]
-    target = robot_position + np.array([0.0, 0.0, 1.0], dtype=np.float32)
+    target = target_position + np.array([0.0, 0.0, target_height], dtype=np.float32)
     return camera_position, target
+
+
+def focus_context(objects: list[dict]) -> tuple[dict | None, np.ndarray | None]:
+    """Choose a stable fixture and the centroid of non-fixture task objects."""
+    fixture = next((obj for obj in objects if obj["category"] in FIXTURE_CATEGORIES), None)
+    details = [
+        obj["position"]
+        for obj in objects
+        if obj["category"] not in FIXTURE_CATEGORIES and obj["category"] != "floor"
+    ]
+    detail_centroid = np.mean(details, axis=0).astype(np.float32) if details else None
+    return fixture, detail_centroid
+
+
+def navigable_focus_camera_position(env, robot_position: np.ndarray, robot_orientation: np.ndarray, focus_position: np.ndarray) -> np.ndarray:
+    """Choose a free camera point near a focus object using the scene's traversability map."""
+    try:
+        path, _ = env.scene.get_shortest_path(
+            floor=0,
+            source_world=th.tensor(robot_position[:2], dtype=th.float32),
+            target_world=th.tensor(focus_position[:2], dtype=th.float32),
+            entire_path=True,
+            robot=env.robots[0],
+        )
+        if path is not None and len(path) > 0:
+            # Stay two map waypoints before the target to avoid putting the
+            # virtual viewer inside a refrigerator, counter, or wall.
+            waypoint = to_numpy(path[max(0, len(path) - 3)])
+            return np.array([waypoint[0], waypoint[1], robot_position[2] + 1.45], dtype=np.float32)
+    except (AttributeError, RuntimeError, ValueError):
+        pass
+
+    # A saved R1 Pro pose is known to be collision-free, so it is a safer
+    # fallback than placing a camera at an arbitrary object-local offset.
+    return object_camera_pose(robot_position, robot_orientation, ROBOT_CAMERA_OFFSET, 1.0)[0]
+
+
+def calibrated_focus_camera_position(task_name: str, fixture_position: np.ndarray, section: int) -> np.ndarray | None:
+    """Return a verified fixture view, if this template has one."""
+    offsets = CALIBRATED_FOCUS_OFFSETS.get(task_name)
+    if offsets is None:
+        return None
+    return fixture_position + offsets[section - 1]
 
 
 def look_at_quaternion(camera_position: np.ndarray, target: np.ndarray) -> np.ndarray:
@@ -221,21 +310,29 @@ def main() -> None:
             config["task"]["activity_definition_id"] = 0
             config["task"]["activity_instance_id"] = 0
             config["task"]["online_object_sampling"] = False
-            config["task"]["use_presampled_robot_pose"] = True
+            # The locally installed 2025 task templates do not consistently
+            # contain an R1 Pro entry in ``robot_poses``.  The task instance
+            # still provides the house and task-object placement; let the R1
+            # Pro use its configured reset pose instead of requiring absent
+            # legacy pose metadata.
+            config["task"]["use_presampled_robot_pose"] = False
             env = og.Environment(configs=config)
             env.reset()
+        pose_source = position_robot_for_recording(env, args.scene)
         camera = og.sim.viewer_camera
-        robot_position, robot_orientation, object_names = task_view_context(env)
+        robot_position, robot_orientation, task_objects = task_view_context(env)
+        fixture, detail_centroid = focus_context(task_objects)
         print(
-            f"Task camera robot={robot_position.tolist()} objects={object_names}",
+            f"Task camera robot={robot_position.tolist()} pose={pose_source} "
+            f"objects={[obj['name'] for obj in task_objects]}",
             flush=True,
         )
 
         # The viewer sensor observes a new pose after a simulator tick. This
-        # directly follows OmniGibson's CameraMover recording utility and does
-        # not call env.step() or send a robot action.
-        initial_position, initial_target = third_person_camera_pose(
-            robot_position, robot_orientation, 0, args.frames
+        # follows OmniGibson's CameraMover recording utility and never calls
+        # env.step() or sends a robot action.
+        initial_position, initial_target = object_camera_pose(
+            robot_position, robot_orientation, ROBOT_CAMERA_OFFSET, 1.0
         )
         camera.set_position_orientation(
             position=initial_position, orientation=look_at_quaternion(initial_position, initial_target)
@@ -244,7 +341,19 @@ def main() -> None:
 
         writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
         for index in range(args.frames):
-            position, target = third_person_camera_pose(robot_position, robot_orientation, index, args.frames)
+            section = min((index * 3) // args.frames, 2)
+            if section == 0 or fixture is None:
+                position, target = object_camera_pose(
+                    robot_position, robot_orientation, ROBOT_CAMERA_OFFSET, 1.0
+                )
+            else:
+                focus_position = fixture["position"] if section == 1 or detail_centroid is None else detail_centroid
+                position = calibrated_focus_camera_position(args.task, fixture["position"], section)
+                if position is None:
+                    position = navigable_focus_camera_position(
+                        env, robot_position, robot_orientation, focus_position
+                    )
+                target = focus_position + np.array([0.0, 0.0, 0.75], dtype=np.float32)
             camera.set_position_orientation(
                 position=position, orientation=look_at_quaternion(position, target)
             )

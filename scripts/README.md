@@ -62,17 +62,25 @@ conda activate behavior
 
 ## 批量任务场景视频
 
-以下命令生成 11 个任务的初始化场景视频：MP4 全部保存至
+以下命令生成当前服务器可直接加载的 3 个任务实例的初始化场景视频：MP4 全部保存至
 `runs/videos/task_scene/`，同名日志保存至 `runs/logs/task_scene/`：
 
 ```bash
 ./scripts/r1pro_task_scene_videos.sh
 ```
 
-视频只展示加载后的 R1 Pro、房间与任务物体，没有发送机器人动作，也不表示机器人
-完成了任务。Python 实现位于 `src/r1pro_task_scene_record.py`。三个已安装预采样任务
-实例直接加载；其余任务尝试 BEHAVIOR 的在线物体采样，失败会保留在同目录的同名
-`.log` 文件并继续处理下一项。
+每段视频依次展示 R1 Pro、主要设施和任务物体区域；没有发送机器人动作，也不表示
+机器人完成了任务。Python 实现位于 `src/r1pro_task_scene_record.py`。批处理固定为下列本机
+已有的预采样实例，因而不会尝试不稳定的在线物体采样：
+
+| 任务 | 场景 |
+| --- | --- |
+| `carrying_in_groceries` | `house_double_floor_lower` |
+| `thawing_frozen_food` | `house_single_floor` |
+| `canning_food` | `house_single_floor` |
+
+其余最初列出的 8 个任务仍有定义文件和基础模型，但当前没有可与已安装版本直接配合的
+本地任务实例；本脚本不会把它们伪装成可运行任务。
 
 ## 相关上游脚本
 
