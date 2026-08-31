@@ -22,19 +22,19 @@ EOF
 command_name="${1:-}"
 case "$command_name" in
     preflight)
-        exec "$SCRIPT_DIR/scripts/preflight.sh"
+        exec "$SCRIPT_DIR/scripts/tools/preflight.sh"
         ;;
     bootstrap)
-        exec "$SCRIPT_DIR/scripts/bootstrap_anaconda.sh"
+        exec "$SCRIPT_DIR/scripts/setup/bootstrap_anaconda.sh"
         ;;
     install)
         shift
-        exec "$SCRIPT_DIR/scripts/install_behavior.sh" "$@"
+        exec "$SCRIPT_DIR/scripts/setup/install_behavior.sh" "$@"
         ;;
     all)
         shift
-        "$SCRIPT_DIR/scripts/bootstrap_anaconda.sh"
-        exec "$SCRIPT_DIR/scripts/install_behavior.sh" "$@"
+        "$SCRIPT_DIR/scripts/setup/bootstrap_anaconda.sh"
+        exec "$SCRIPT_DIR/scripts/setup/install_behavior.sh" "$@"
         ;;
     -h|--help|help|'')
         usage

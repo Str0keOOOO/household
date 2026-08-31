@@ -11,8 +11,7 @@ licensed assets, and run examples.
 ```text
 .
 ├── third_party/BEHAVIOR-1K/   # Unmodified upstream Git submodule
-├── scripts/                   # Isolated setup, preflight, run, and record helpers
-├── docs/                      # Decisions, sources, resources, and operating notes
+├── scripts/                   # Local setup, diagnostic, and demo helpers
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
 └── runs/                      # Demo logs and output (ignored by Git)
@@ -47,16 +46,14 @@ cd /data6/xuchenfei/household
 # After explicitly accepting the listed licenses:
 ./setup.sh install --accept-licenses
 # Finite, non-interactive verification (safe on this headless server):
-./scripts/run_official_quickstart.sh --smoke
-./scripts/run_r1pro_demo.sh --smoke
-# The following two original upstream entry points require a GUI / interaction:
-./scripts/run_official_quickstart.sh
-./scripts/run_r1pro_demo.sh
+./scripts/run/official_quickstart.sh --smoke
+./scripts/run/r1pro_behavior_demo.sh --smoke
 ```
 
 `install --accept-licenses` is intentionally an explicit opt-in: it accepts the
 Conda terms, NVIDIA Isaac Sim EULA, and BEHAVIOR dataset license on the caller's
-behalf. See [docs/OPERATIONS.md](docs/OPERATIONS.md) before using it.
+behalf. The daily upstream commands and their optional local wrappers are listed
+in [scripts/README.md](scripts/README.md).
 
 ## Repository rules
 

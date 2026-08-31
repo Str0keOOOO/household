@@ -3,7 +3,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/env.sh"
+source "$SCRIPT_DIR/../env.sh"
 
 ANACONDA_RELEASE="2026.07-1"
 INSTALLER="Anaconda3-2026.07-1-Linux-x86_64.sh"

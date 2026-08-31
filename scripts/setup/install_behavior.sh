@@ -3,14 +3,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
-source "$SCRIPT_DIR/env.sh"
+source "$SCRIPT_DIR/../env.sh"
 
 if [[ "${1:-}" != "--accept-licenses" || "$#" -ne 1 ]]; then
     cat <<'EOF' >&2
 Refusing to accept licenses implicitly.
 
 This command installs Conda packages, NVIDIA Isaac Sim, and the licensed
-BEHAVIOR assets. To continue, first review docs/OPERATIONS.md and then run:
+BEHAVIOR assets. To continue, first review the applicable upstream licenses and
+then run:
   ./setup.sh install --accept-licenses
 EOF
     exit 2
