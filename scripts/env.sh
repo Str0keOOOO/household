@@ -14,7 +14,7 @@ export CONDA_PKGS_DIRS="$ANACONDA_PREFIX/pkgs"
 export OMNIGIBSON_DATA_PATH="$HOUSEHOLD_ROOT/data/omnigibson"
 export BEHAVIOR_ROOT="$HOUSEHOLD_ROOT/third_party/BEHAVIOR-1K"
 
-# GPU 1 was idle during the recorded preflight. Preserve an explicit caller choice.
+# GPU 1 was selected for this workspace; callers can override it explicitly.
 if [[ -z "${OMNIGIBSON_GPU_ID:-}" ]]; then
     export OMNIGIBSON_GPU_ID=1
 fi

@@ -9,7 +9,6 @@ usage() {
 Usage: ./setup.sh <command> [options]
 
 Commands:
-  preflight                 Report host compatibility and available workspace space.
   bootstrap                 Install the pinned Anaconda Distribution under ~/anaconda3.
   install --accept-licenses Create the isolated environment and install BEHAVIOR.
   all --accept-licenses     Run bootstrap followed by install.
@@ -21,9 +20,6 @@ EOF
 
 command_name="${1:-}"
 case "$command_name" in
-    preflight)
-        exec "$SCRIPT_DIR/scripts/preflight.sh"
-        ;;
     bootstrap)
         exec "$SCRIPT_DIR/scripts/bootstrap_anaconda.sh"
         ;;

@@ -15,6 +15,9 @@ licensed assets, and run examples.
 ├── src/                       # Local Python implementations called by scripts
 ├── config/                    # Local-only tool configuration templates
 ├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
+│   └── omnigibson/
+│       ├── 2025-challenge-task-instances/  # Official pre-sampled instances
+│       └── local-task-instances/            # Locally sampled, persistent instances
 └── runs/                      # Generated output: videos/ and logs/ (ignored by Git)
 ```
 
@@ -42,7 +45,6 @@ Exact version observations are in [versions.lock](versions.lock).
 
 ```bash
 cd /data6/xuchenfei/household
-./setup.sh preflight
 ./setup.sh bootstrap
 # After explicitly accepting the listed licenses:
 ./setup.sh install --accept-licenses
@@ -51,14 +53,41 @@ cd /data6/xuchenfei/household
 ./scripts/r1pro_behavior_demo.sh --smoke
 # 在无桌面服务器生成可下载观看的 MP4：
 ./scripts/r1pro_record_demo.sh
-# 批量生成 11 个任务的初始化场景视频：
-./scripts/r1pro_task_scene_videos.sh
+# 生成 heating_food_up 的初始化场景视频：
+./scripts/r1pro_heating_food_scene.sh
+# 生成可复现的随机小幅抖动录像：
+./scripts/r1pro_heating_food_scene.sh --random-jitter --jitter-scale 0.04 --seed 20260901 --frames 120 --fps 20
 ```
 
 `install --accept-licenses` is intentionally an explicit opt-in: it accepts the
 Conda terms, NVIDIA Isaac Sim EULA, and BEHAVIOR dataset license on the caller's
 behalf. The daily upstream commands and their optional local wrappers are listed
 in [scripts/README.md](scripts/README.md).
+
+## 本地任务实例与录像
+
+`data/omnigibson/2025-challenge-task-instances/` 是下载的官方预采样任务包；不要
+修改其中的内容。对官方包中没有预采样模板的任务（目前是 `heating_food_up`），本仓库
+会将一次成功的本地采样结果保存到
+`data/omnigibson/local-task-instances/`。保存的是完整场景 JSON，之后加载该 JSON，
+不再重新在线采样，因此同一台服务器上的运行可复现。
+
+该目录和 `data/` 的其余内容一样受 BEHAVIOR 数据许可约束，已被 Git 忽略；Git 只
+记录生成脚本、所选场景/模型和随机种子；本地 manifest 记录校验值，不能重新分发任务 JSON。录像不放在数据目录，
+统一写到 `runs/videos/`，对应日志写到 `runs/logs/`。这样可以清理录像而不影响已保存的
+任务实例，也可以重录视频而不改变场景。
+
+## 渲染与光影
+
+本地场景录像使用 RTX `RealTimePathTracing` 实时光线追踪模式，保留光照、阴影、反射和
+间接漫反射，并启用 DLSS Quality。第三人称视频默认 1280×720，原生相机视频的三个面板
+默认各为 480×480；三个面板来自 R1 Pro USD 中固定相对路径
+`left_realsense_link/Camera`、`zed_link/Camera`、`right_realsense_link/Camera` 的独立 RGB
+render product，不是移动的 viewer camera。它们不是开销显著更高的
+离线路径追踪。服务器的 RTX A6000 可运行此模式。
+
+R1 Pro 录制初始姿态采用 BEHAVIOR 官方采样器的 `untuck` 设置，使腕部相机朝向工作区；这
+只是初始化姿态，不代表机器人已经执行任务。
 
 ## WebRTC 实时观看
 

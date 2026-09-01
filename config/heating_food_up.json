@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "task": "heating_food_up",
+  "scene": "house_single_floor",
+  "random_seed": 20260901,
+  "room_types": [
+    "kitchen"
+  ],
+  "sampling_whitelist": {
+    "electric_refrigerator.n.01": {
+      "fridge": {
+        "dszchb": null
+      }
+    },
+    "microwave.n.02": {
+      "microwave": {
+        "abzvij": null
+      }
+    },
+    "countertop.n.01": {
+      "countertop": {
+        "kelzer": null
+      }
+    },
+    "hamburger.n.01": {
+      "hamburger": {
+        "fyswch": null
+      }
+    },
+    "plate.n.04": {
+      "plate": {
+        "luhkiz": null
+      }
+    }
+  },
+  "sampling_blacklist": {}
+}

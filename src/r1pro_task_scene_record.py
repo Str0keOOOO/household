@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Record an initialized BEHAVIOR task scene with R1 Pro, without robot actions."""
+"""Record an initialized BEHAVIOR task scene with R1 Pro."""
 
 from __future__ import annotations
 
 import argparse
-import json
 import os
 from pathlib import Path
 
-# OmniGibson reads this macro when imported.
 os.environ.setdefault("OMNIGIBSON_HEADLESS", "1")
 
 import imageio.v2 as imageio
@@ -17,359 +15,467 @@ import torch as th
 import yaml
 
 import omnigibson as og
+import omnigibson.lazy as lazy
 from omnigibson.macros import gm
 from omnigibson.utils.transform_utils import mat2quat
 
 
-# Camera offsets use an object's body frame: x is forward and y is left.  The
-# recording intentionally contains three short static views (R1 Pro, the
-# main fixture, and the smaller task objects) rather than an action rollout.
-ROBOT_CAMERA_OFFSET = np.array([-2.10, -1.15, 1.35], dtype=np.float32)
-# One installed legacy template does not include R1 Pro in its robot_poses
-# metadata.  This position is the R1 Pro pose stored by a different local
-# template in the same kitchen and is used only for a static camera preview.
-FALLBACK_ROBOT_POSES = {
-    "house_single_floor": (
-        np.array([6.776428, -0.971100, 0.005005], dtype=np.float32),
-        np.array([0.0, 0.0, -0.644101, 0.764941], dtype=np.float32),
-    ),
-}
-
-# These fixture-relative offsets were calibrated against the three installed
-# legacy templates. They keep the virtual camera in a
-# visible room instead of behind the walls that surround many old fixtures.
-CALIBRATED_FOCUS_OFFSETS = {
-    "carrying_in_groceries": (
-        np.array([4.0, 0.0, 1.55], dtype=np.float32),
-        np.array([0.0, -4.0, 1.55], dtype=np.float32),
-    ),
-    "thawing_frozen_food": (
-        np.array([-4.0, 0.0, 1.55], dtype=np.float32),
-        np.array([0.0, -4.0, 1.55], dtype=np.float32),
-    ),
-    "canning_food": (
-        np.array([-4.0, 0.0, 1.55], dtype=np.float32),
-        np.array([0.0, -4.0, 1.55], dtype=np.float32),
-    ),
-}
-
-FIXTURE_CATEGORIES = {"fridge", "microwave", "oven", "countertop", "cabinet", "bottom_cabinet"}
+NATIVE_CAMERA_SPECS = (
+    ("left_wrist_realsense", "left_realsense_link"),
+    ("zed", "zed_link"),
+    ("right_wrist_realsense", "right_realsense_link"),
+)
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Record an initialized R1 Pro BEHAVIOR task scene; no robot action is sent."
-    )
+    parser = argparse.ArgumentParser(description="Record an initialized R1 Pro BEHAVIOR task scene.")
     parser.add_argument("--task", required=True, help="Canonical BEHAVIOR activity name")
     parser.add_argument("--scene", required=True, help="OmniGibson scene model name")
-    parser.add_argument("--output", required=True, type=Path, help="MP4 path to create")
+    parser.add_argument("--output", required=True, type=Path, help="Third-person MP4 path to create")
     parser.add_argument(
-        "--online-object-sampling",
-        action="store_true",
-        help="Create task objects online instead of loading a pre-sampled task instance",
+        "--scene-file",
+        type=Path,
+        help="Optional complete local task-template JSON; do not re-sample when it is supplied",
     )
     parser.add_argument("--frames", type=int, default=30, help="Frames to record (default: 30)")
     parser.add_argument("--fps", type=int, default=10, help="Output FPS (default: 10)")
-    parser.add_argument("--width", type=int, default=640, help="Viewer width (default: 640)")
-    parser.add_argument("--height", type=int, default=360, help="Viewer height (default: 360)")
+    parser.add_argument(
+        "--random-jitter",
+        action="store_true",
+        help="Apply a seeded, small random normalized action at each recorded frame",
+    )
+    parser.add_argument(
+        "--jitter-scale",
+        type=float,
+        default=0.04,
+        help="Multiplier for each sampled normalized action (default: 0.04)",
+    )
+    parser.add_argument("--seed", type=int, default=20260901, help="Random-action seed (default: 20260901)")
+    parser.add_argument("--width", type=int, default=1280, help="Third-person width (default: 1280)")
+    parser.add_argument("--height", type=int, default=720, help="Third-person height (default: 720)")
+    parser.add_argument(
+        "--camera-view",
+        choices=("near_right", "task_right", "near_left", "task_left", "side_right", "side_left", "behind", "auto"),
+        default="near_right",
+        help="Third-person view; near_right is the fast default, auto scans all candidates",
+    )
+    parser.add_argument(
+        "--robot-output",
+        type=Path,
+        help="Optional horizontally tiled MP4 from the native R1 Pro cameras",
+    )
+    parser.add_argument(
+        "--camera-width",
+        type=int,
+        default=480,
+        help="Native-camera panel width and sensor width in pixels (default: 480)",
+    )
+    parser.add_argument(
+        "--camera-height",
+        type=int,
+        default=480,
+        help="Native-camera panel height and sensor height in pixels (default: 480)",
+    )
     args = parser.parse_args()
-    for name in ("frames", "fps", "width", "height"):
+    for name in ("frames", "fps", "width", "height", "camera_width", "camera_height"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name} must be positive")
     if args.output.suffix.lower() != ".mp4":
         parser.error("--output must end in .mp4")
+    if args.robot_output is not None and args.robot_output.suffix.lower() != ".mp4":
+        parser.error("--robot-output must end in .mp4")
+    if args.scene_file is not None and not args.scene_file.is_file():
+        parser.error(f"scene file does not exist: {args.scene_file}")
+    if not 0.0 < args.jitter_scale <= 1.0:
+        parser.error("--jitter-scale must be in (0, 1]")
     return args
 
 
-def frame_from_camera(camera) -> np.ndarray:
-    frame = camera.get_obs()[0]["rgb"][:, :, :3]
-    if hasattr(frame, "detach"):
-        frame = frame.detach().cpu().numpy()
-    return np.asarray(frame, dtype=np.uint8)
-
-
-def to_numpy(value) -> np.ndarray:
+def as_numpy(value) -> np.ndarray:
     if hasattr(value, "detach"):
         value = value.detach().cpu().numpy()
     return np.asarray(value, dtype=np.float32)
 
 
-def task_view_context(env) -> tuple[np.ndarray, np.ndarray, list[dict]]:
-    """Return R1 Pro pose and instantiated non-system task-object context."""
-    robot_position, robot_orientation = env.robots[0].get_position_orientation()
-    objects = []
-
-    for entity in env.task.object_scope.values():
-        if not entity.exists or entity.is_system or entity.wrapped_obj is env.robots[0]:
-            continue
-        try:
-            position, orientation = entity.wrapped_obj.get_position_orientation()
-        except (AttributeError, RuntimeError):
-            continue
-        wrapped = entity.wrapped_obj
-        objects.append(
-            {
-                "name": entity.name or entity.bddl_inst,
-                "category": getattr(wrapped, "category", ""),
-                "position": to_numpy(position),
-                "orientation": to_numpy(orientation),
-            }
-        )
-
-    return to_numpy(robot_position), to_numpy(robot_orientation), objects
+def frame_from_camera(camera) -> np.ndarray:
+    frame = camera.get_obs()[0]["rgb"][:, :, :3]
+    return np.asarray(frame.detach().cpu().numpy() if hasattr(frame, "detach") else frame, dtype=np.uint8)
 
 
-def position_robot_for_recording(env, scene_name: str) -> str:
-    """Place R1 Pro at the saved pose, or at a verified same-scene fallback."""
-    robot = env.robots[0]
-    presampled_poses = env.scene.get_task_metadata(key="robot_poses")
-    if isinstance(presampled_poses, dict) and robot.model_name in presampled_poses:
-        pose = presampled_poses[robot.model_name][0]
-        position = to_numpy(pose["position"])
-        orientation = to_numpy(pose["orientation"])
-        source = "instance R1 Pro pose"
-    elif scene_name in FALLBACK_ROBOT_POSES:
-        position, orientation = FALLBACK_ROBOT_POSES[scene_name]
-        source = "verified same-scene fallback pose"
-    else:
-        return "configured reset pose"
+def _native_camera_prim_paths(robot) -> tuple[str, ...]:
+    """Resolve the three fixed native Camera prim paths for the loaded R1 Pro.
 
-    robot.set_position_orientation(position=position, orientation=orientation)
-    robot.keep_still()
-    og.sim.step()
-    return source
-
-
-def planar_basis(orientation: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """Return horizontal forward and left unit vectors from an [x, y, z, w] quaternion."""
-    x, y, z, w = orientation
-    forward = np.array(
-        [1.0 - 2.0 * (y * y + z * z), 2.0 * (x * y + z * w), 0.0], dtype=np.float32
-    )
-    forward /= np.linalg.norm(forward)
-    return forward, np.array([-forward[1], forward[0], 0.0], dtype=np.float32)
+    The USD layout is fixed by the R1 Pro asset.  Only the scene/robot prefix
+    varies at runtime, so derive that prefix from ``robot.prim_path`` and use
+    explicit link-relative paths.  This intentionally does not scan the stage
+    or select a similarly named camera from another object.
+    """
+    robot_root = str(robot.prim_path).rstrip("/")
+    result = []
+    for _, link_name in NATIVE_CAMERA_SPECS:
+        prim_path = f"{robot_root}/{link_name}/Camera"
+        prim = og.sim.stage.GetPrimAtPath(prim_path)
+        if not prim or not prim.IsValid() or prim.GetTypeName() != "Camera":
+            raise RuntimeError(
+                f"Expected native R1 Pro Camera prim at explicit path {prim_path}, "
+                f"but the stage has no valid Camera there (type={prim.GetTypeName() if prim else 'missing'})"
+            )
+        result.append(prim_path)
+    return tuple(result)
 
 
-def object_camera_pose(
-    target_position: np.ndarray, target_orientation: np.ndarray, offset: np.ndarray, target_height: float
-) -> tuple[np.ndarray, np.ndarray]:
-    """Return a camera pose targeting an R1 Pro or task object from its local side."""
-    forward, left = planar_basis(target_orientation)
-    camera_position = target_position + forward * offset[0] + left * offset[1]
-    camera_position[2] += offset[2]
-    target = target_position + np.array([0.0, 0.0, target_height], dtype=np.float32)
-    return camera_position, target
-
-
-def focus_context(objects: list[dict]) -> tuple[dict | None, np.ndarray | None]:
-    """Choose a stable fixture and the centroid of non-fixture task objects."""
-    fixture = next((obj for obj in objects if obj["category"] in FIXTURE_CATEGORIES), None)
-    details = [
-        obj["position"]
-        for obj in objects
-        if obj["category"] not in FIXTURE_CATEGORIES and obj["category"] != "floor"
-    ]
-    detail_centroid = np.mean(details, axis=0).astype(np.float32) if details else None
-    return fixture, detail_centroid
-
-
-def navigable_focus_camera_position(env, robot_position: np.ndarray, robot_orientation: np.ndarray, focus_position: np.ndarray) -> np.ndarray:
-    """Choose a free camera point near a focus object using the scene's traversability map."""
+def native_r1pro_camera_streams(robot, width: int, height: int) -> tuple[tuple[str, str, object, object], ...]:
+    """Create RGB render products directly from the three native USD cameras."""
+    prim_paths = _native_camera_prim_paths(robot)
+    streams = []
     try:
-        path, _ = env.scene.get_shortest_path(
-            floor=0,
-            source_world=th.tensor(robot_position[:2], dtype=th.float32),
-            target_world=th.tensor(focus_position[:2], dtype=th.float32),
-            entire_path=True,
-            robot=env.robots[0],
+        for (label, _), prim_path in zip(NATIVE_CAMERA_SPECS, prim_paths):
+            render_product = lazy.omni.replicator.core.create.render_product(
+                prim_path, (width, height), force_new=True
+            )
+            annotator = lazy.omni.replicator.core.AnnotatorRegistry.get_annotator("rgb")
+            annotator.attach([render_product])
+            streams.append((label, prim_path, render_product, annotator))
+    except Exception:
+        destroy_native_r1pro_camera_streams(tuple(streams))
+        raise
+    return tuple(streams)
+
+
+def frame_from_native_camera(stream: tuple[str, str, object, object]) -> np.ndarray:
+    label, prim_path, _, annotator = stream
+    raw_frame = annotator.get_data(device=og.sim.device)
+    frame = raw_frame["data"] if isinstance(raw_frame, dict) else raw_frame
+    if hasattr(frame, "detach"):
+        frame = frame.detach().cpu().numpy()
+    frame = np.asarray(frame)
+    if frame.ndim != 3 or frame.shape[2] < 3 or frame.shape[0] == 0 or frame.shape[1] == 0:
+        raise RuntimeError(f"Native camera {label} at {prim_path} returned an invalid RGB shape: {frame.shape}")
+    return np.asarray(np.clip(frame[:, :, :3], 0, 255), dtype=np.uint8)
+
+
+def destroy_native_r1pro_camera_streams(streams: tuple[tuple[str, str, object, object], ...]) -> None:
+    """Detach and destroy temporary Replicator products before shutdown."""
+    for _, _, render_product, annotator in streams:
+        try:
+            annotator.detach([render_product.path])
+        except Exception:
+            pass
+        try:
+            render_product.destroy()
+        except Exception:
+            pass
+
+
+def label_panel(frame: np.ndarray, label: str) -> np.ndarray:
+    """Add a small label bar while keeping the camera image unchanged below it."""
+    try:
+        from PIL import Image, ImageDraw
+    except ImportError:
+        return frame
+    image = Image.fromarray(frame)
+    labeled = Image.new("RGB", (image.width, image.height + 32), color=(12, 12, 12))
+    labeled.paste(image, (0, 32))
+    ImageDraw.Draw(labeled).text((12, 9), label, fill=(245, 245, 245))
+    return np.asarray(labeled, dtype=np.uint8)
+
+
+def tiled_native_camera_frame(
+    camera_streams: tuple[tuple[str, str, object, object], ...], panel_width: int, panel_height: int
+) -> np.ndarray:
+    """Build a strip from native left-wrist, ZED, and right-wrist RGB frames."""
+    from PIL import Image
+
+    panels = []
+    for stream in camera_streams:
+        label = stream[0]
+        frame = frame_from_native_camera(stream)
+        resized = np.asarray(
+            Image.fromarray(frame).resize((panel_width, panel_height), Image.Resampling.LANCZOS), dtype=np.uint8
         )
-        if path is not None and len(path) > 0:
-            # Stay two map waypoints before the target to avoid putting the
-            # virtual viewer inside a refrigerator, counter, or wall.
-            waypoint = to_numpy(path[max(0, len(path) - 3)])
-            return np.array([waypoint[0], waypoint[1], robot_position[2] + 1.45], dtype=np.float32)
-    except (AttributeError, RuntimeError, ValueError):
-        pass
-
-    # A saved R1 Pro pose is known to be collision-free, so it is a safer
-    # fallback than placing a camera at an arbitrary object-local offset.
-    return object_camera_pose(robot_position, robot_orientation, ROBOT_CAMERA_OFFSET, 1.0)[0]
+        panels.append(label_panel(resized, label.replace("_", " ")))
+    return np.concatenate(panels, axis=1)
 
 
-def calibrated_focus_camera_position(task_name: str, fixture_position: np.ndarray, section: int) -> np.ndarray | None:
-    """Return a verified fixture view, if this template has one."""
-    offsets = CALIBRATED_FOCUS_OFFSETS.get(task_name)
-    if offsets is None:
-        return None
-    return fixture_position + offsets[section - 1]
-
-
-def look_at_quaternion(camera_position: np.ndarray, target: np.ndarray) -> np.ndarray:
-    """Return an [x, y, z, w] camera quaternion looking from position to target."""
-    forward = target - camera_position
+def look_at_quaternion(position: np.ndarray, target: np.ndarray) -> np.ndarray:
+    forward = target - position
     forward /= np.linalg.norm(forward)
-    world_up = np.array([0.0, 0.0, 1.0], dtype=np.float32)
-    right = np.cross(forward, world_up)
+    right = np.cross(forward, np.array([0.0, 0.0, 1.0], dtype=np.float32))
     right /= np.linalg.norm(right)
     up = np.cross(right, forward)
-    rotation = np.column_stack((right, up, -forward))
-    return to_numpy(mat2quat(th.tensor(rotation, dtype=th.float32)))
+    return as_numpy(mat2quat(th.tensor(np.column_stack((right, up, -forward)), dtype=th.float32)))
 
 
-def online_task_config(args: argparse.Namespace) -> tuple[dict, list[str] | None]:
-    """Build the task configuration used by OmniGibson's official sampler."""
-    whitelist = None
-    blacklist = None
-    room_types = None
-    behavior_root = os.environ.get("BEHAVIOR_ROOT")
-    if behavior_root:
-        list_path = Path(behavior_root) / "OmniGibson" / "omnigibson" / "sampling" / "task_custom_lists.json"
-        if list_path.is_file():
-            custom_lists = json.loads(list_path.read_text(encoding="utf-8"))
-            task_settings = custom_lists.get(args.task, {})
-            if isinstance(task_settings, dict):
-                room_types = task_settings.get("room_types")
-                scene_settings = task_settings.get(args.scene, {})
-                if isinstance(scene_settings, dict):
-                    whitelist = scene_settings.get("whitelist")
-                    blacklist = scene_settings.get("blacklist")
-
-    task_config = {
-        "type": "BehaviorTask",
-        "activity_name": args.task,
-        "activity_definition_id": 0,
-        "activity_instance_id": 0,
-        "online_object_sampling": True,
-        "use_presampled_robot_pose": False,
-        "sampling_whitelist": whitelist,
-        "sampling_blacklist": blacklist,
-    }
-    return task_config, room_types
+def set_saved_robot_pose(env) -> str:
+    """Use a stored R1 Pro pose when present; absent legacy metadata is valid."""
+    robot = env.robots[0]
+    poses = env.scene.get_task_metadata(key="robot_poses")
+    if not isinstance(poses, dict) or robot.model_name not in poses:
+        return "configured reset pose (no saved R1 Pro pose)"
+    pose = poses[robot.model_name][0]
+    robot.set_position_orientation(position=as_numpy(pose["position"]), orientation=as_numpy(pose["orientation"]))
+    robot.keep_still()
+    return "saved R1 Pro pose"
 
 
-def create_online_sampling_environment(config: dict, args: argparse.Namespace):
-    """Create and sample a task using OmniGibson's documented two-stage flow."""
-    task_config, room_types = online_task_config(args)
-    config.pop("task", None)
-    config["scene"]["load_room_types"] = room_types
-    config["robots"][0]["obs_modalities"] = []
-    config["robots"][0]["default_reset_mode"] = "untuck"
-    config["robots"][0]["position"] = [-50.0, -50.0, -50.0]
+def task_focus_point(env, robot_position: np.ndarray) -> tuple[np.ndarray, list[str]]:
+    """Return a task-derived view target, avoiding task-specific camera constants."""
+    positions = []
+    task_item_positions = []
+    names = []
+    for bddl_name, entity in env.task.object_scope.items():
+        if not entity.exists or entity.is_system or entity.wrapped_obj is env.robots[0]:
+            continue
+        obj = entity.wrapped_obj
+        if obj.category == "floors":
+            continue
+        position, _ = obj.get_position_orientation()
+        position = as_numpy(position)
+        positions.append(position)
+        if obj.category in {"microwave", "hamburger", "plate"}:
+            task_item_positions.append(position)
+        names.append(bddl_name)
+    if not positions:
+        return robot_position + np.array([1.0, 0.0, 0.7], dtype=np.float32), names
+    # For heating_food_up, fixtures such as the fridge and countertop are far
+    # apart from the actual microwave/food work area. Prefer those task items
+    # so the overview camera includes the appliance the task acts on.
+    focus_positions = task_item_positions or positions
+    return np.mean(focus_positions, axis=0) + np.array([0.0, 0.0, 0.35], dtype=np.float32), names
 
-    # sample_b1k_tasks.py enables transition rules only while the base scene is
-    # created, then dynamically attaches the BehaviorTask while simulation is
-    # stopped. Loading it directly as an environment task leaves unpopulated
-    # BDDL entities in the initial observation space.
-    with gm.unlocked():
-        gm.ENABLE_TRANSITION_RULES = True
-        try:
-            env = og.Environment(configs=config)
-        finally:
-            gm.ENABLE_TRANSITION_RULES = False
 
-    for obj in env.scene.objects:
-        obj.keep_still()
-    env.scene.update_initial_file()
-    og.sim.stop()
+def image_information_score(frame: np.ndarray) -> float:
+    """Prefer a detailed, non-overexposed view over a wall or ceiling."""
+    luminance = frame.astype(np.float32).mean(axis=2)
+    histogram, _ = np.histogram(luminance, bins=32, range=(0, 256))
+    probabilities = histogram[histogram > 0] / histogram.sum()
+    entropy = -np.sum(probabilities * np.log(probabilities))
+    overexposure_penalty = max(0.0, float(luminance.mean()) - 190.0) / 30.0
+    return float(entropy - overexposure_penalty)
 
-    env.task_config.clear()
-    env.task_config.update(task_config)
-    env._load_task()
-    if env.task.feedback is not None:
-        raise RuntimeError(f"Online sampling rejected {args.task}: {env.task.feedback}")
 
-    og.sim.play()
-    env.task.reset(env)
-    for _ in range(4):
-        og.sim.step()
-    return env
+def position_task_camera(
+    env, robot_position: np.ndarray, camera_view: str
+) -> tuple[np.ndarray, list[str], str, np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """Select a generic, unobstructed-looking overview camera for the task."""
+    target, names = task_focus_point(env, robot_position)
+    horizontal = target[:2] - robot_position[:2]
+    norm = np.linalg.norm(horizontal)
+    if norm < 0.1:
+        horizontal = np.array([1.0, 0.0], dtype=np.float32)
+    else:
+        horizontal /= norm
+    side = np.array([-horizontal[1], horizontal[0]], dtype=np.float32)
+    # Indoor walls make a single fixed "behind robot" viewpoint unreliable.
+    # These candidates are derived solely from the robot and task-object cluster,
+    # so the rule is reusable for arbitrary saved BEHAVIOR instances.
+    candidate_offsets = (
+        ("behind", -2.2 * horizontal),
+        ("near_left", -0.8 * horizontal + 1.2 * side),
+        ("near_right", -0.8 * horizontal - 1.2 * side),
+        ("side_left", 0.2 * horizontal + 2.0 * side),
+        ("side_right", 0.2 * horizontal - 2.0 * side),
+        ("task_left", 1.0 * horizontal + 1.5 * side),
+        ("task_right", 1.0 * horizontal - 1.5 * side),
+    )
+    candidate_positions = {}
+    for label, offset in candidate_offsets:
+        camera_position = robot_position.copy()
+        camera_position[:2] += offset
+        camera_position[2] += 1.55
+        candidate_positions[label] = camera_position
+
+    camera = og.sim.viewer_camera
+    if camera_view != "auto":
+        label = camera_view
+        camera_position = candidate_positions[label]
+        camera.set_position_orientation(position=camera_position, orientation=look_at_quaternion(camera_position, target))
+        # Isaac Sim applies a viewer-camera transform asynchronously. Three
+        # render ticks are required before the readback corresponds to this
+        # camera rather than the preceding camera's image.
+        for _ in range(3):
+            og.sim.render()
+        frame = frame_from_camera(camera)
+        score = image_information_score(frame)
+        print(f"Camera view={label}:{score:.2f} (settled)", flush=True)
+        return target, names, label, frame, {label: frame}, candidate_positions
+
+    choices = []
+    for label, _ in candidate_offsets:
+        camera_position = candidate_positions[label]
+        camera.set_position_orientation(position=camera_position, orientation=look_at_quaternion(camera_position, target))
+        # Auto mode is intentionally slower: it settles every candidate before
+        # scoring so the selected frame is not a stale previous-view buffer.
+        for _ in range(3):
+            og.sim.render()
+        frame = frame_from_camera(camera)
+        choices.append((image_information_score(frame), label, camera_position, frame))
+
+    # Indoor fixtures can obscure one side of the robot entirely. Choose the
+    # highest-information robot-relative candidate for the third-person view.
+    score, label, camera_position, frame = max(choices, key=lambda choice: choice[0])
+    camera.set_position_orientation(position=camera_position, orientation=look_at_quaternion(camera_position, target))
+    print(
+        "Camera candidates="
+        + ",".join(f"{candidate_label}:{candidate_score:.2f}" for candidate_score, candidate_label, _, _ in choices)
+        + f" selected={label}:{score:.2f}",
+        flush=True,
+    )
+    return (
+        target,
+        names,
+        label,
+        frame,
+        {candidate_label: candidate_frame for _, candidate_label, _, candidate_frame in choices},
+        {candidate_label: candidate_position for _, candidate_label, candidate_position, _ in choices},
+    )
 
 
 def main() -> None:
     args = parse_args()
     args.output.parent.mkdir(parents=True, exist_ok=True)
-
     gm.ENABLE_OBJECT_STATES = True
     gm.USE_GPU_DYNAMICS = False
-
-    config_path = Path(og.example_config_path) / "r1pro_behavior.yaml"
-    with config_path.open("r", encoding="utf-8") as file:
+    with (Path(og.example_config_path) / "r1pro_behavior.yaml").open(encoding="utf-8") as file:
         config = yaml.safe_load(file)
-
     config["scene"]["scene_model"] = args.scene
+    # A cached task template already determines the loaded rooms.
+    config["scene"]["load_room_types"] = None
+    if args.scene_file is not None:
+        config["scene"]["scene_file"] = str(args.scene_file.resolve())
     config["render"]["viewer_width"] = args.width
     config["render"]["viewer_height"] = args.height
-
-    env = None
-    writer = None
+    # Match the official BEHAVIOR task sampler.  The example config defaults to
+    # ``tuck``, which leaves the wrist cameras aimed at the robot body or ceiling
+    # instead of the workspace.  Sampling uses the untucked R1 Pro posture.
+    config["robots"][0]["default_reset_mode"] = "untuck"
+    env = third_person_writer = robot_writer = None
+    native_camera_streams = ()
     try:
-        if args.online_object_sampling:
-            env = create_online_sampling_environment(config=config, args=args)
-        else:
-            config["task"]["activity_name"] = args.task
-            config["task"]["activity_definition_id"] = 0
-            config["task"]["activity_instance_id"] = 0
-            config["task"]["online_object_sampling"] = False
-            # The locally installed 2025 task templates do not consistently
-            # contain an R1 Pro entry in ``robot_poses``.  The task instance
-            # still provides the house and task-object placement; let the R1
-            # Pro use its configured reset pose instead of requiring absent
-            # legacy pose metadata.
-            config["task"]["use_presampled_robot_pose"] = False
-            env = og.Environment(configs=config)
-            env.reset()
-        pose_source = position_robot_for_recording(env, args.scene)
-        camera = og.sim.viewer_camera
-        robot_position, robot_orientation, task_objects = task_view_context(env)
-        fixture, detail_centroid = focus_context(task_objects)
+        print("Creating OmniGibson environment...", flush=True)
+        config["task"].update(
+            activity_name=args.task,
+            activity_definition_id=0,
+            activity_instance_id=0,
+            online_object_sampling=False,
+            use_presampled_robot_pose=False,
+        )
+        env = og.Environment(configs=config)
+        print("Environment created; resetting task scene...", flush=True)
+        env.reset()
+        print("Task scene reset complete; preparing cameras...", flush=True)
+        # NVIDIA recommends RTX Real-Time 2.0 for robotics and synthetic-data
+        # workflows, and DLSS Quality for sensor images (especially below
+        # 600x600). This does not alter the upstream repository.
+        renderer_settings = lazy.carb.settings.get_settings()
+        renderer_settings.set("/rtx/rendermode", "RealTimePathTracing")
+        renderer_settings.set_int("/rtx/post/dlss/execMode", 2)
+        renderer_settings.set_bool("/rtx/pathtracing/fractionalCutoutOpacity", True)
+
+        pose_source = set_saved_robot_pose(env)
+        robot_position, _ = map(as_numpy, env.robots[0].get_position_orientation())
+        native_camera_frame = None
+        if args.robot_output is not None:
+            native_camera_streams = native_r1pro_camera_streams(
+                env.robots[0], args.camera_width, args.camera_height
+            )
+            print(
+                "Native cameras="
+                + "|".join(f"{label}:{prim_path}" for label, prim_path, _, _ in native_camera_streams),
+                flush=True,
+            )
+        (
+            target,
+            focus_objects,
+            camera_label,
+            third_person_frame,
+            candidate_frames,
+            candidate_positions,
+        ) = position_task_camera(env, robot_position, args.camera_view)
+        if args.robot_output is not None:
+            # The candidate-camera renders above also advance the native
+            # Camera prim render products. Do not add viewer-only render ticks
+            # here: Isaac Sim 4.5 can close a completed headless app after
+            # redundant calls at this point.
+            native_camera_frame = tiled_native_camera_frame(
+                native_camera_streams, args.camera_width, args.camera_height
+            )
+        # Camera selection above already performs multiple offscreen renders.
+        # Do not add render ticks here: Isaac Sim 4.5 may close a completed
+        # headless app after repeated viewer-only render calls.
+        print("Capturing third-person frame", flush=True)
         print(
-            f"Task camera robot={robot_position.tolist()} pose={pose_source} "
-            f"objects={[obj['name'] for obj in task_objects]}",
+            f"Task={args.task} scene={args.scene} R1 Pro pose={pose_source} "
+            f"focus={target.tolist()} camera={camera_label} objects={','.join(focus_objects)} "
+            f"renderer=RealTimePathTracing dlss=quality viewer={args.width}x{args.height} "
+            f"native_camera_resolution={args.camera_width}x{args.camera_height} "
+            f"random_jitter={args.random_jitter} jitter_scale={args.jitter_scale} seed={args.seed}",
             flush=True,
         )
 
-        # The viewer sensor observes a new pose after a simulator tick. This
-        # follows OmniGibson's CameraMover recording utility and never calls
-        # env.step() or sends a robot action.
-        initial_position, initial_target = object_camera_pose(
-            robot_position, robot_orientation, ROBOT_CAMERA_OFFSET, 1.0
-        )
-        camera.set_position_orientation(
-            position=initial_position, orientation=look_at_quaternion(initial_position, initial_target)
-        )
-        og.sim.step()
+        third_person_writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
+        if args.robot_output is not None:
+            args.robot_output.parent.mkdir(parents=True, exist_ok=True)
+            robot_writer = imageio.get_writer(args.robot_output, fps=args.fps, macro_block_size=1)
+        if args.random_jitter:
+            env.robots[0].action_space.seed(args.seed)
+            # The first camera frame was rendered during candidate selection and
+            # is already stable. Write it before the first action so the video
+            # never starts with the transient white buffer seen after a camera
+            # transform update.
+            third_person_writer.append_data(third_person_frame)
+            if robot_writer is not None:
+                robot_writer.append_data(native_camera_frame)
 
-        writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
-        for index in range(args.frames):
-            section = min((index * 3) // args.frames, 2)
-            if section == 0 or fixture is None:
-                position, target = object_camera_pose(
-                    robot_position, robot_orientation, ROBOT_CAMERA_OFFSET, 1.0
+            for _ in range(args.frames - 1):
+                # OmniGibson actions are normalized by the robot action space.
+                # Scaling a valid sample yields a deliberately small, visible
+                # perturbation while preserving a deterministic replay seed.
+                action = env.robots[0].action_space.sample()
+                _, _, terminated, truncated, _ = env.step(action * args.jitter_scale)
+                camera = og.sim.viewer_camera
+                selected_position = candidate_positions[camera_label]
+                camera.set_position_orientation(
+                    position=selected_position, orientation=look_at_quaternion(selected_position, target)
                 )
-            else:
-                focus_position = fixture["position"] if section == 1 or detail_centroid is None else detail_centroid
-                position = calibrated_focus_camera_position(args.task, fixture["position"], section)
-                if position is None:
-                    position = navigable_focus_camera_position(
-                        env, robot_position, robot_orientation, focus_position
+                # A viewer camera transform needs several render updates before
+                # its render product is ready for readback.
+                for _ in range(3):
+                    og.sim.render()
+                    third_person_frame = frame_from_camera(camera)
+                if robot_writer is not None:
+                    native_camera_frame = tiled_native_camera_frame(
+                        native_camera_streams, args.camera_width, args.camera_height
                     )
-                target = focus_position + np.array([0.0, 0.0, 0.75], dtype=np.float32)
-            camera.set_position_orientation(
-                position=position, orientation=look_at_quaternion(position, target)
-            )
-            og.sim.step()
-            writer.append_data(frame_from_camera(camera))
+                third_person_writer.append_data(third_person_frame)
+                if robot_writer is not None:
+                    robot_writer.append_data(native_camera_frame)
+                if terminated or truncated:
+                    print("Task ended during random jitter; stopping recording early.", flush=True)
+                    break
+        else:
+            for _ in range(args.frames):
+                third_person_writer.append_data(third_person_frame)
+                if robot_writer is not None:
+                    robot_writer.append_data(native_camera_frame)
+    except Exception:
+        import traceback
+
+        traceback.print_exc()
+        raise
     finally:
-        if writer is not None:
-            writer.close()
+        if third_person_writer is not None:
+            third_person_writer.close()
+        if robot_writer is not None:
+            robot_writer.close()
+        if native_camera_streams:
+            destroy_native_r1pro_camera_streams(native_camera_streams)
         if env is not None:
             og.shutdown()
 
-    print(
-        f"Saved task scene video: task={args.task} scene={args.scene} "
-        f"online_object_sampling={args.online_object_sampling} output={args.output}",
-        flush=True,
-    )
+    print(f"Saved task scene video: {args.output}", flush=True)
+    if args.robot_output is not None:
+        print(f"Saved native R1 Pro camera video: {args.robot_output}", flush=True)
 
 
 if __name__ == "__main__":

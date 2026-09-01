@@ -8,15 +8,15 @@ scripts/
 ├── env.sh                         # 共用环境变量：数据、Anaconda、源码与 GPU
 ├── bootstrap_anaconda.sh           # 安装锁定版本的 Anaconda
 ├── install_behavior.sh             # 调用上游安装器并下载许可数据
-├── preflight.sh                    # 只读的服务器与 GPU 检查
 ├── official_quickstart.sh          # 官方键盘控制示例的包装器
 ├── r1pro_behavior_demo.sh          # 官方 R1 Pro BEHAVIOR 示例的包装器
 ├── r1pro_record_demo.sh            # 无桌面录制 R1 Pro 示例为 MP4 的启动器
-└── r1pro_task_scene_videos.sh      # 批量录制 BEHAVIOR 任务初始化场景
+└── r1pro_heating_food_scene.sh     # 录制 heating_food_up 的初始化场景
 
 src/
 ├── r1pro_record_demo.py            # r1pro_record_demo.sh 调用的本地录像逻辑
-└── r1pro_task_scene_record.py      # r1pro_task_scene_videos.sh 调用的录像逻辑
+├── r1pro_task_scene_record.py      # 已保存任务实例的静态场景录像逻辑
+└── sample_behavior_task_instance.py # 一次性采样并保存完整任务实例
 ```
 
 ## 日常使用
@@ -60,27 +60,45 @@ conda activate behavior
 录像 Python 实现在 `src/r1pro_record_demo.py`；它是本地集成代码，不改动上游示例。
 生成的视频和日志均被 Git 忽略。
 
-## 批量任务场景视频
+## heating_food_up 场景视频
 
-以下命令生成当前服务器可直接加载的 3 个任务实例的初始化场景视频：MP4 全部保存至
-`runs/videos/task_scene/`，同名日志保存至 `runs/logs/task_scene/`：
+以下命令生成 `heating_food_up` 的初始化场景视频；MP4 保存至 `runs/videos/task_scene/`，
+日志保存至 `runs/logs/task_scene/`：
 
 ```bash
-./scripts/r1pro_task_scene_videos.sh
+./scripts/r1pro_heating_food_scene.sh
 ```
 
-每段视频依次展示 R1 Pro、主要设施和任务物体区域；没有发送机器人动作，也不表示
-机器人完成了任务。Python 实现位于 `src/r1pro_task_scene_record.py`。批处理固定为下列本机
-已有的预采样实例，因而不会尝试不稳定的在线物体采样：
+视频只展示已初始化的 R1 Pro 和任务场景；没有发送机器人动作，也不表示机器人完成了
+任务。第三人称视频和原生相机视频来自同一初始化状态，不推进旧模板中可能不稳定的物理状态。
 
-| 任务 | 场景 |
+如需查看关节控制的可复现小幅随机抖动，运行：
+
+```bash
+./scripts/r1pro_heating_food_scene.sh --random-jitter --jitter-scale 0.04 --seed 20260901 --frames 120 --fps 20
+```
+
+该模式每帧执行 `env.step(action * 0.04)`：`action` 从 R1 Pro 的归一化动作空间中、以
+`20260901` 为随机种子采样。它仅用于检查控制和相机，不是任务策略，也不代表完成任务。
+
+| 文件 | 内容与质量 |
 | --- | --- |
-| `carrying_in_groceries` | `house_double_floor_lower` |
-| `thawing_frozen_food` | `house_single_floor` |
-| `canning_food` | `house_single_floor` |
+| `heating_food_up.mp4` | 第三人称，1280×720；RTX Real-Time 2.0（`RealTimePathTracing`）与 DLSS Quality。 |
+| `heating_food_up-r1pro-native-cameras.mp4` | R1 Pro 原生相机横向拼接：左腕 RealSense → ZED → 右腕 RealSense；每路默认 480×480，成片为 1440×512（含标签栏）。 |
 
-其余最初列出的 8 个任务仍有定义文件和基础模型，但当前没有可与已安装版本直接配合的
-本地任务实例；本脚本不会把它们伪装成可运行任务。
+Python 实现位于 `src/r1pro_task_scene_record.py`，第三人称相机位置由 R1 Pro 和任务物体的位置计算；当前启动器使用已经验证的 `near_right` 机位，避免在服务器上逐个扫描候选机位造成长时间等待。需要自动评分时可给录制器传 `--camera-view auto`。录像采用 NVIDIA 推荐给机器人和合成数据工作流的 RTX Real-Time 2.0
+（`RealTimePathTracing`）与 DLSS Quality。原生相机视频按 R1 Pro USD 的固定布局读取三个
+明确的 Camera prim 相对路径：`left_realsense_link/Camera`、`zed_link/Camera`、
+`right_realsense_link/Camera`，再拼接当前 `robot.prim_path` 的运行时前缀；为每个 prim
+建立独立的 RGB Replicator render product，不改变 Camera prim 的位姿。`--camera-width` 和
+`--camera-height` 只调整这些 render product 的分辨率。这样绕过 OmniGibson 1.5 只扫描
+link 直接子节点的限制，录像内容与控制策略读取的原生相机坐标和朝向一致。录制器将 R1 Pro 初始关节姿态
+设为官方任务采样器使用的 `untuck`；这不是任务动作，只是让腕部相机朝向工作区。
+
+`heating_food_up` 首次采样后会保存完整 JSON 和本地 manifest 至
+`data/omnigibson/local-task-instances/heating_food_up/`，之后只加载该 JSON，不再在线采样。
+配置文件记录场景、固定随机种子与模型选择，manifest 记录配置和实例的 SHA-256；这些数据
+受许可约束且被 Git 忽略。该任务在本服务器上可复现。
 
 ## 相关上游脚本
 
