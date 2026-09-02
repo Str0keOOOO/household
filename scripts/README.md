@@ -75,14 +75,14 @@ conda activate behavior
 ./scripts/r1pro_heating_food_streaming.sh
 ```
 
-该脚本复用同一场景/录像启动器，启用 Isaac Sim 4.5 的 WebRTC 扩展，并在录制后保持 30 分钟；
-用桌面版 Isaac Sim WebRTC Streaming Client 连接服务器 IP。旧浏览器 `:8211` 页面不适用于
-当前版本。客户端只能连接一个会话，结束时在服务器终端按 `Ctrl+C`。
+该脚本只加载场景并启用 Isaac Sim 4.5 的 WebRTC 扩展：不写 MP4、没有保持时长参数，直到在服务器
+终端按 `Ctrl+C` 才结束。用桌面版 Isaac Sim WebRTC Streaming Client 连接服务器 IP；旧浏览器
+`:8211` 页面不适用于当前版本。
 
 视频只展示已初始化的 R1 Pro 和任务场景；没有发送机器人动作，也不表示机器人完成了
 任务。第三人称视频和原生相机视频来自同一初始化状态，不推进旧模板中可能不稳定的物理状态。
 启动器按 `config/heating_food_up.json` 打开指定冰箱，并将汉堡物理落在上层搁板；机器人仍使用
-任务实例保存的原始站位。
+任务实例保存的 `y/z`，覆盖其 `x` 与朝向以居中正对冰箱。
 
 如需查看关节控制的可复现小幅随机抖动，运行：
 
@@ -105,8 +105,7 @@ Python 实现位于 `src/r1pro_task_scene_record.py`，第三人称相机位置�
 建立独立的 RGB Replicator render product，不改变 Camera prim 的位姿。`--camera-width` 和
 `--camera-height` 只调整这些 render product 的分辨率。这样绕过 OmniGibson 1.5 只扫描
 link 直接子节点的限制，录像内容与控制策略读取的原生相机坐标和朝向一致。录制器将 R1 Pro 初始关节姿态
-设为 OmniGibson 默认的 `tuck`（双臂收拢、机身直立）；这不是任务动作。原生腕部相机仍会输出画面，但其
-视野会随收拢的手臂改变。
+设为 `tuck`（双臂收拢）；这不是任务动作。原生腕部相机仍会输出画面，且其视野会随双臂姿态改变。
 
 `heating_food_up` 首次采样后会保存完整 JSON 和本地 manifest 至
 `data/omnigibson/local-task-instances/heating_food_up/`，之后只加载该 JSON，不再在线采样。

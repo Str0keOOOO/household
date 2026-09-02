@@ -29,13 +29,14 @@ NATIVE_CAMERA_SPECS = (
     ("zed", "zed_link"),
     ("right_wrist_realsense", "right_realsense_link"),
 )
+DEFAULT_R1PRO_POSTURE = "tuck"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Record an initialized R1 Pro BEHAVIOR task scene.")
     parser.add_argument("--task", required=True, help="Canonical BEHAVIOR activity name")
     parser.add_argument("--scene", required=True, help="OmniGibson scene model name")
-    parser.add_argument("--output", required=True, type=Path, help="Third-person MP4 path to create")
+    parser.add_argument("--output", type=Path, help="Third-person MP4 path to create")
     parser.add_argument(
         "--scene-file",
         type=Path,
@@ -52,10 +53,15 @@ def parse_args() -> argparse.Namespace:
         help="Enable Isaac Sim 4.5 WebRTC streaming for this process",
     )
     parser.add_argument(
-        "--streaming-hold-seconds",
-        type=int,
-        default=0,
-        help="After recording, keep a streaming session alive for this many seconds (default: 0)",
+        "--streaming-only",
+        action="store_true",
+        help="Keep the initialized scene streaming until Ctrl+C; do not create MP4 files",
+    )
+    parser.add_argument(
+        "--robot-posture",
+        choices=("tuck", "untuck"),
+        default=DEFAULT_R1PRO_POSTURE,
+        help="Arm initialization applied after the task template is restored (default: tuck)",
     )
     parser.add_argument("--frames", type=int, default=30, help="Frames to record (default: 30)")
     parser.add_argument("--fps", type=int, default=10, help="Output FPS (default: 10)")
@@ -100,18 +106,20 @@ def parse_args() -> argparse.Namespace:
     for name in ("frames", "fps", "width", "height", "camera_width", "camera_height"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name} must be positive")
-    if args.output.suffix.lower() != ".mp4":
+    if args.output is not None and args.output.suffix.lower() != ".mp4":
         parser.error("--output must end in .mp4")
+    if not args.streaming_only and args.output is None:
+        parser.error("--output is required unless --streaming-only is supplied")
+    if args.streaming_only and not args.streaming:
+        parser.error("--streaming-only requires --streaming")
+    if args.streaming_only and args.robot_output is not None:
+        parser.error("--robot-output cannot be used with --streaming-only")
     if args.robot_output is not None and args.robot_output.suffix.lower() != ".mp4":
         parser.error("--robot-output must end in .mp4")
     if args.scene_file is not None and not args.scene_file.is_file():
         parser.error(f"scene file does not exist: {args.scene_file}")
     if args.initialization_config is not None and not args.initialization_config.is_file():
         parser.error(f"initialization configuration does not exist: {args.initialization_config}")
-    if args.streaming_hold_seconds < 0:
-        parser.error("--streaming-hold-seconds must be non-negative")
-    if args.streaming_hold_seconds and not args.streaming:
-        parser.error("--streaming-hold-seconds requires --streaming")
     if not 0.0 < args.jitter_scale <= 1.0:
         parser.error("--jitter-scale must be in (0, 1]")
     return args
@@ -177,6 +185,41 @@ def native_r1pro_camera_streams(robot, width: int, height: int) -> tuple[tuple[s
         destroy_native_r1pro_camera_streams(tuple(streams))
         raise
     return tuple(streams)
+
+
+def right_wrist_camera_alignment(env, streams: tuple[tuple[str, str, object, object], ...], path: Path | None) -> str:
+    """Report the refrigerator's horizontal offset in the right wrist camera frame.
+
+    A centred target has camera-local x=0 metres.
+    """
+    if path is None:
+        return "Right wrist alignment unavailable: no initialization configuration."
+    refrigerator_name = (
+        json.loads(path.read_text(encoding="utf-8")).get("initialization", {}).get("refrigerator", {}).get("bddl_name")
+    )
+    entity = env.task.object_scope.get(refrigerator_name)
+    if not isinstance(refrigerator_name, str) or entity is None or not entity.exists or entity.is_system:
+        return "Right wrist alignment unavailable: configured refrigerator is absent."
+    right_wrist = next((stream for stream in streams if stream[0] == "right_wrist_realsense"), None)
+    if right_wrist is None:
+        return "Right wrist alignment unavailable: native right wrist camera was not created."
+
+    from pxr import Gf, UsdGeom
+
+    camera_prim = og.sim.stage.GetPrimAtPath(right_wrist[1])
+    camera_to_world = UsdGeom.XformCache().GetLocalToWorldTransform(camera_prim)
+    camera_position = np.asarray(camera_to_world.ExtractTranslation(), dtype=np.float64)
+    refrigerator_position, _ = entity.wrapped_obj.get_position_orientation()
+    refrigerator_position = as_numpy(refrigerator_position).astype(np.float64)
+    refrigerator_in_camera = np.asarray(
+        camera_to_world.GetInverse().Transform(Gf.Vec3d(*refrigerator_position)), dtype=np.float64
+    )
+    return (
+        "Right wrist x alignment "
+        f"camera_world_x_m={camera_position[0]:.4f} refrigerator_world_x_m={refrigerator_position[0]:.4f} "
+        f"camera_local_x_offset_m={refrigerator_in_camera[0]:.4f} "
+        "(0.0000 means centred)"
+    )
 
 
 def frame_from_native_camera(stream: tuple[str, str, object, object]) -> np.ndarray:
@@ -255,10 +298,12 @@ def set_saved_robot_pose(env) -> str:
     return "saved R1 Pro pose"
 
 
-def apply_scene_initialization(env, path: Path | None) -> str:
-    """Open the configured refrigerator and land the hamburger, without moving the robot."""
+def apply_scene_initialization(env, path: Path | None, robot_posture: str) -> str:
+    """Apply configured presentation state after restoring the saved robot pose."""
     if path is None:
-        return set_saved_robot_pose(env)
+        pose_source = set_saved_robot_pose(env)
+        getattr(env.robots[0], robot_posture)()
+        return f"{pose_source}; explicit posture={robot_posture}"
     initialization = json.loads(path.read_text(encoding="utf-8")).get("initialization", {})
     refrigerator_spec, hamburger_spec = initialization.get("refrigerator"), initialization.get("hamburger")
     if not isinstance(refrigerator_spec, dict) or not isinstance(hamburger_spec, dict):
@@ -298,7 +343,26 @@ def apply_scene_initialization(env, path: Path | None) -> str:
         th.tensor(orientation, dtype=th.float32),
     )
     pose_source = set_saved_robot_pose(env)
-    return f"{pose_source}; refrigerator {refrigerator.name} open={opened}; hamburger landed on upper shelf"
+    robot_spec = initialization.get("robot")
+    if robot_spec is not None:
+        position = robot_spec.get("position") if isinstance(robot_spec, dict) else None
+        if not isinstance(position, list) or len(position) != 3:
+            raise ValueError("initialization.robot requires position [x, y, z]")
+        robot = env.robots[0]
+        _, saved_orientation = robot.get_position_orientation()
+        orientation = robot_spec.get("orientation")
+        if orientation is not None and (not isinstance(orientation, list) or len(orientation) != 4):
+            raise ValueError("initialization.robot orientation must be [x, y, z, w]")
+        applied_orientation = saved_orientation if orientation is None else as_numpy(orientation)
+        robot.set_position_orientation(position=as_numpy(position), orientation=applied_orientation)
+        robot.keep_still()
+        pose_source += f"; configured robot position={position}, orientation={as_numpy(applied_orientation).tolist()}"
+    robot = env.robots[0]
+    getattr(robot, robot_posture)()
+    return (
+        f"{pose_source}; explicit posture={robot_posture}; refrigerator {refrigerator.name} open={opened}; "
+        "hamburger landed on upper shelf"
+    )
 
 
 def task_focus_point(env, robot_position: np.ndarray) -> tuple[np.ndarray, list[str]]:
@@ -416,7 +480,8 @@ def position_task_camera(
 
 def main() -> None:
     args = parse_args()
-    args.output.parent.mkdir(parents=True, exist_ok=True)
+    if args.output is not None:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
     gm.ENABLE_OBJECT_STATES = True
     gm.USE_GPU_DYNAMICS = False
     with (Path(og.example_config_path) / "r1pro_behavior.yaml").open(encoding="utf-8") as file:
@@ -428,9 +493,9 @@ def main() -> None:
         config["scene"]["scene_file"] = str(args.scene_file.resolve())
     config["render"]["viewer_width"] = args.width
     config["render"]["viewer_height"] = args.height
-    # Keep the R1 Pro in OmniGibson's compact, upright default posture. This
-    # is an initialization choice only; it does not apply a task action.
-    config["robots"][0]["default_reset_mode"] = "tuck"
+    # Use the R1 Pro's compact arm posture. This is an initialization choice
+    # only; it does not apply a task action or change the base pose.
+    config["robots"][0]["default_reset_mode"] = args.robot_posture
     env = third_person_writer = robot_writer = None
     native_camera_streams = ()
     try:
@@ -457,7 +522,7 @@ def main() -> None:
         renderer_settings.set_int("/rtx/post/dlss/execMode", 2)
         renderer_settings.set_bool("/rtx/pathtracing/fractionalCutoutOpacity", True)
 
-        pose_source = apply_scene_initialization(env, args.initialization_config)
+        pose_source = apply_scene_initialization(env, args.initialization_config, args.robot_posture)
         robot_position, _ = map(as_numpy, env.robots[0].get_position_orientation())
         native_camera_frame = None
         if args.robot_output is not None:
@@ -479,9 +544,12 @@ def main() -> None:
         ) = position_task_camera(env, robot_position, args.camera_view)
         if args.robot_output is not None:
             # The candidate-camera renders above also advance the native
-            # Camera prim render products. Do not add viewer-only render ticks
-            # here: Isaac Sim 4.5 can close a completed headless app after
-            # redundant calls at this point.
+            # Camera prim transforms. Read the alignment only now: before the
+            # first render USD can still expose the template's stale camera
+            # transform after we have repositioned the robot base.
+            print(right_wrist_camera_alignment(env, native_camera_streams, args.initialization_config), flush=True)
+            # Do not add viewer-only render ticks here: Isaac Sim 4.5 can
+            # close a completed headless app after redundant calls.
             native_camera_frame = tiled_native_camera_frame(
                 native_camera_streams, args.camera_width, args.camera_height
             )
@@ -497,6 +565,12 @@ def main() -> None:
             f"random_jitter={args.random_jitter} jitter_scale={args.jitter_scale} seed={args.seed}",
             flush=True,
         )
+
+        if args.streaming_only:
+            print("Streaming-only session is ready; press Ctrl+C in this terminal to stop it.", flush=True)
+            while True:
+                og.sim.render()
+                time.sleep(1.0 / 30.0)
 
         third_person_writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
         if args.robot_output is not None:
@@ -543,18 +617,6 @@ def main() -> None:
                 third_person_writer.append_data(third_person_frame)
                 if robot_writer is not None:
                     robot_writer.append_data(native_camera_frame)
-        if args.streaming_hold_seconds:
-            deadline = time.monotonic() + args.streaming_hold_seconds
-            print(
-                f"Streaming session remains available for {args.streaming_hold_seconds}s; "
-                "press Ctrl+C in this terminal to stop it early.",
-                flush=True,
-            )
-            while time.monotonic() < deadline:
-                # Continue updating the streamed viewport without applying a
-                # robot action or resetting the task state.
-                og.sim.render()
-                time.sleep(1.0 / 30.0)
     except Exception:
         import traceback
 
@@ -570,7 +632,8 @@ def main() -> None:
         if env is not None:
             og.shutdown()
 
-    print(f"Saved task scene video: {args.output}", flush=True)
+    if args.output is not None:
+        print(f"Saved task scene video: {args.output}", flush=True)
     if args.robot_output is not None:
         print(f"Saved native R1 Pro camera video: {args.robot_output}", flush=True)
 
