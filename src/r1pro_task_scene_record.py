@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import time
 from pathlib import Path
 
 os.environ.setdefault("OMNIGIBSON_HEADLESS", "1")
@@ -17,6 +19,8 @@ import yaml
 import omnigibson as og
 import omnigibson.lazy as lazy
 from omnigibson.macros import gm
+from omnigibson.object_states import Open
+from omnigibson.utils.sim_utils import land_object
 from omnigibson.utils.transform_utils import mat2quat
 
 
@@ -36,6 +40,22 @@ def parse_args() -> argparse.Namespace:
         "--scene-file",
         type=Path,
         help="Optional complete local task-template JSON; do not re-sample when it is supplied",
+    )
+    parser.add_argument(
+        "--initialization-config",
+        type=Path,
+        help="Tracked task configuration whose refrigerator and hamburger state is applied after scene loading",
+    )
+    parser.add_argument(
+        "--streaming",
+        action="store_true",
+        help="Enable Isaac Sim 4.5 WebRTC streaming for this process",
+    )
+    parser.add_argument(
+        "--streaming-hold-seconds",
+        type=int,
+        default=0,
+        help="After recording, keep a streaming session alive for this many seconds (default: 0)",
     )
     parser.add_argument("--frames", type=int, default=30, help="Frames to record (default: 30)")
     parser.add_argument("--fps", type=int, default=10, help="Output FPS (default: 10)")
@@ -86,6 +106,12 @@ def parse_args() -> argparse.Namespace:
         parser.error("--robot-output must end in .mp4")
     if args.scene_file is not None and not args.scene_file.is_file():
         parser.error(f"scene file does not exist: {args.scene_file}")
+    if args.initialization_config is not None and not args.initialization_config.is_file():
+        parser.error(f"initialization configuration does not exist: {args.initialization_config}")
+    if args.streaming_hold_seconds < 0:
+        parser.error("--streaming-hold-seconds must be non-negative")
+    if args.streaming_hold_seconds and not args.streaming:
+        parser.error("--streaming-hold-seconds requires --streaming")
     if not 0.0 < args.jitter_scale <= 1.0:
         parser.error("--jitter-scale must be in (0, 1]")
     return args
@@ -95,6 +121,17 @@ def as_numpy(value) -> np.ndarray:
     if hasattr(value, "detach"):
         value = value.detach().cpu().numpy()
     return np.asarray(value, dtype=np.float32)
+
+
+def enable_webrtc_streaming() -> None:
+    """Enable Isaac Sim 4.5 WebRTC after OmniGibson has created its Kit app."""
+    # Do not access lazy.omni.kit here: OmniGibson's lazy ``omni`` importer does
+    # not expose the Kit submodule. This is the same post-app extension utility
+    # the upstream simulator uses for its own streaming backends. Enabling the
+    # WebRTC extension automatically enables its streamsdk dependency.
+    lazy.isaacsim.core.utils.extensions.enable_extension("omni.kit.livestream.webrtc")
+    port = lazy.carb.settings.get_settings().get_as_int("/app/livestream/port")
+    print(f"Isaac Sim WebRTC streaming enabled; signaling port={port}.", flush=True)
 
 
 def frame_from_camera(camera) -> np.ndarray:
@@ -216,6 +253,52 @@ def set_saved_robot_pose(env) -> str:
     robot.set_position_orientation(position=as_numpy(pose["position"]), orientation=as_numpy(pose["orientation"]))
     robot.keep_still()
     return "saved R1 Pro pose"
+
+
+def apply_scene_initialization(env, path: Path | None) -> str:
+    """Open the configured refrigerator and land the hamburger, without moving the robot."""
+    if path is None:
+        return set_saved_robot_pose(env)
+    initialization = json.loads(path.read_text(encoding="utf-8")).get("initialization", {})
+    refrigerator_spec, hamburger_spec = initialization.get("refrigerator"), initialization.get("hamburger")
+    if not isinstance(refrigerator_spec, dict) or not isinstance(hamburger_spec, dict):
+        raise ValueError("initialization requires refrigerator and hamburger objects")
+    refrigerator_name, opened = refrigerator_spec.get("bddl_name"), refrigerator_spec.get("open")
+    hamburger_name = hamburger_spec.get("bddl_name")
+    landing_position, orientation = hamburger_spec.get("landing_position"), hamburger_spec.get("orientation")
+    if (
+        not isinstance(refrigerator_name, str)
+        or not isinstance(opened, bool)
+        or not isinstance(hamburger_name, str)
+        or not isinstance(landing_position, list)
+        or len(landing_position) != 3
+        or not isinstance(orientation, list)
+        or len(orientation) != 4
+    ):
+        raise ValueError("invalid refrigerator or hamburger initialization")
+    refrigerator_entity = env.task.object_scope.get(refrigerator_name)
+    hamburger_entity = env.task.object_scope.get(hamburger_name)
+    if (
+        refrigerator_entity is None
+        or hamburger_entity is None
+        or not refrigerator_entity.exists
+        or not hamburger_entity.exists
+        or refrigerator_entity.is_system
+        or hamburger_entity.is_system
+    ):
+        raise RuntimeError("configured refrigerator or hamburger is absent from this task instance")
+    refrigerator = refrigerator_entity.wrapped_obj
+    open_state = refrigerator.states.get(Open)
+    if open_state is None or not open_state.set_value(opened, fully=True):
+        raise RuntimeError(f"Could not set {refrigerator.name} open={opened}")
+    hamburger = hamburger_entity.wrapped_obj
+    land_object(
+        hamburger,
+        th.tensor(landing_position, dtype=th.float32),
+        th.tensor(orientation, dtype=th.float32),
+    )
+    pose_source = set_saved_robot_pose(env)
+    return f"{pose_source}; refrigerator {refrigerator.name} open={opened}; hamburger landed on upper shelf"
 
 
 def task_focus_point(env, robot_position: np.ndarray) -> tuple[np.ndarray, list[str]]:
@@ -345,10 +428,9 @@ def main() -> None:
         config["scene"]["scene_file"] = str(args.scene_file.resolve())
     config["render"]["viewer_width"] = args.width
     config["render"]["viewer_height"] = args.height
-    # Match the official BEHAVIOR task sampler.  The example config defaults to
-    # ``tuck``, which leaves the wrist cameras aimed at the robot body or ceiling
-    # instead of the workspace.  Sampling uses the untucked R1 Pro posture.
-    config["robots"][0]["default_reset_mode"] = "untuck"
+    # Keep the R1 Pro in OmniGibson's compact, upright default posture. This
+    # is an initialization choice only; it does not apply a task action.
+    config["robots"][0]["default_reset_mode"] = "tuck"
     env = third_person_writer = robot_writer = None
     native_camera_streams = ()
     try:
@@ -361,9 +443,12 @@ def main() -> None:
             use_presampled_robot_pose=False,
         )
         env = og.Environment(configs=config)
-        print("Environment created; resetting task scene...", flush=True)
-        env.reset()
-        print("Task scene reset complete; preparing cameras...", flush=True)
+        if args.streaming:
+            enable_webrtc_streaming()
+        # Environment.post_play_load() already resets the task before the
+        # constructor returns. Calling env.reset() here would restore the same
+        # task state a second time and is needlessly expensive for a full house.
+        print("Environment created with its initial task state; preparing cameras...", flush=True)
         # NVIDIA recommends RTX Real-Time 2.0 for robotics and synthetic-data
         # workflows, and DLSS Quality for sensor images (especially below
         # 600x600). This does not alter the upstream repository.
@@ -372,7 +457,7 @@ def main() -> None:
         renderer_settings.set_int("/rtx/post/dlss/execMode", 2)
         renderer_settings.set_bool("/rtx/pathtracing/fractionalCutoutOpacity", True)
 
-        pose_source = set_saved_robot_pose(env)
+        pose_source = apply_scene_initialization(env, args.initialization_config)
         robot_position, _ = map(as_numpy, env.robots[0].get_position_orientation())
         native_camera_frame = None
         if args.robot_output is not None:
@@ -458,6 +543,18 @@ def main() -> None:
                 third_person_writer.append_data(third_person_frame)
                 if robot_writer is not None:
                     robot_writer.append_data(native_camera_frame)
+        if args.streaming_hold_seconds:
+            deadline = time.monotonic() + args.streaming_hold_seconds
+            print(
+                f"Streaming session remains available for {args.streaming_hold_seconds}s; "
+                "press Ctrl+C in this terminal to stop it early.",
+                flush=True,
+            )
+            while time.monotonic() < deadline:
+                # Continue updating the streamed viewport without applying a
+                # robot action or resetting the task state.
+                og.sim.render()
+                time.sleep(1.0 / 30.0)
     except Exception:
         import traceback
 

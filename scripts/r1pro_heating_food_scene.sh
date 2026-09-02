@@ -34,6 +34,7 @@ fi
 printf 'task=heating_food_up scene=house_single_floor instance=%s\n' "$instance" | tee "$log_dir/heating_food_up.log"
 timeout --signal=TERM --kill-after=60s 45m python "$HOUSEHOLD_ROOT/src/r1pro_task_scene_record.py" \
     --task heating_food_up --scene house_single_floor --scene-file "$instance" \
+    --initialization-config "$HOUSEHOLD_ROOT/config/heating_food_up.json" \
     --output "$video_dir/heating_food_up.mp4" \
     --robot-output "$video_dir/heating_food_up-r1pro-native-cameras.mp4" \
     --camera-view near_right \

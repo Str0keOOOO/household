@@ -33,5 +33,16 @@
       }
     }
   },
-  "sampling_blacklist": {}
+  "sampling_blacklist": {},
+  "initialization": {
+    "refrigerator": {
+      "bddl_name": "electric_refrigerator.n.01_1",
+      "open": true
+    },
+    "hamburger": {
+      "bddl_name": "hamburger.n.01_1",
+      "landing_position": [7.807915687561035, -2.0511066913604736, 1.55],
+      "orientation": [-0.0006536627188324928, -0.0005369422724470496, 0.9959927797317505, 0.0894298404455185]
+    }
+  }
 }

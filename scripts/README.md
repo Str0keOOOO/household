@@ -69,8 +69,20 @@ conda activate behavior
 ./scripts/r1pro_heating_food_scene.sh
 ```
 
+如需实时看 Isaac Sim 界面而非只等 MP4，使用：
+
+```bash
+./scripts/r1pro_heating_food_streaming.sh
+```
+
+该脚本复用同一场景/录像启动器，启用 Isaac Sim 4.5 的 WebRTC 扩展，并在录制后保持 30 分钟；
+用桌面版 Isaac Sim WebRTC Streaming Client 连接服务器 IP。旧浏览器 `:8211` 页面不适用于
+当前版本。客户端只能连接一个会话，结束时在服务器终端按 `Ctrl+C`。
+
 视频只展示已初始化的 R1 Pro 和任务场景；没有发送机器人动作，也不表示机器人完成了
 任务。第三人称视频和原生相机视频来自同一初始化状态，不推进旧模板中可能不稳定的物理状态。
+启动器按 `config/heating_food_up.json` 打开指定冰箱，并将汉堡物理落在上层搁板；机器人仍使用
+任务实例保存的原始站位。
 
 如需查看关节控制的可复现小幅随机抖动，运行：
 
@@ -93,12 +105,13 @@ Python 实现位于 `src/r1pro_task_scene_record.py`，第三人称相机位置�
 建立独立的 RGB Replicator render product，不改变 Camera prim 的位姿。`--camera-width` 和
 `--camera-height` 只调整这些 render product 的分辨率。这样绕过 OmniGibson 1.5 只扫描
 link 直接子节点的限制，录像内容与控制策略读取的原生相机坐标和朝向一致。录制器将 R1 Pro 初始关节姿态
-设为官方任务采样器使用的 `untuck`；这不是任务动作，只是让腕部相机朝向工作区。
+设为 OmniGibson 默认的 `tuck`（双臂收拢、机身直立）；这不是任务动作。原生腕部相机仍会输出画面，但其
+视野会随收拢的手臂改变。
 
 `heating_food_up` 首次采样后会保存完整 JSON 和本地 manifest 至
 `data/omnigibson/local-task-instances/heating_food_up/`，之后只加载该 JSON，不再在线采样。
-配置文件记录场景、固定随机种子与模型选择，manifest 记录配置和实例的 SHA-256；这些数据
-受许可约束且被 Git 忽略。该任务在本服务器上可复现。
+配置文件记录场景、固定随机种子、模型选择和上述展示初始化，manifest 记录配置和实例的
+SHA-256；这些数据受许可约束且被 Git 忽略。该任务在本服务器上可复现。
 
 ## 相关上游脚本
 

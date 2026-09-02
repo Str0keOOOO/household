@@ -86,8 +86,12 @@ in [scripts/README.md](scripts/README.md).
 render product，不是移动的 viewer camera。它们不是开销显著更高的
 离线路径追踪。服务器的 RTX A6000 可运行此模式。
 
-R1 Pro 录制初始姿态采用 BEHAVIOR 官方采样器的 `untuck` 设置，使腕部相机朝向工作区；这
-只是初始化姿态，不代表机器人已经执行任务。
+R1 Pro 录制初始姿态采用 OmniGibson 默认的 `tuck`（双臂收拢、机身直立）设置；这只是
+初始化姿态，不代表机器人已经执行任务。原生腕部相机仍会输出画面，但其视野会随收拢的手臂改变。
+
+`heating_food_up` 的本地配置会在加载基础任务实例后打开指定冰箱，并将汉堡通过物理落体落在
+上层搁板；机器人仍使用任务实例保存的原始站位。该覆盖不改写受许可保护的任务 JSON，也不代表
+机器人已经执行开门或放置动作。
 
 ## WebRTC 实时观看
 
@@ -97,10 +101,16 @@ Isaac Sim 4.5 安装**，不可将其视为可用服务：
 <http://10.184.17.155:8211/streaming/webrtc-client?server=10.184.17.155>
 
 当前 Isaac Sim 4.5 官方推荐使用桌面版 *Isaac Sim WebRTC Streaming Client*，而非
-浏览器页面。此服务器实际运行网卡地址为 `10.184.17.151`。BEHAVIOR-1K v3.7.2 的
-远程串流代码仍请求旧扩展 `omni.services.streamclient.webrtc`，与 Isaac Sim 4.5 的
-`omni.kit.livestream.webrtc` 不兼容；需要本仓库增加兼容启动器后，才能使用官方桌面
-客户端连接。
+浏览器页面。使用本仓库的专用启动器：
+
+```bash
+./scripts/r1pro_heating_food_streaming.sh
+```
+
+它在当前 OmniGibson 体验中启用已安装的 `omni.kit.livestream.webrtc` 扩展，完成录像后
+仍保持 30 分钟会话；在自己的桌面电脑启动官方客户端并填写服务器可达 IP（例如
+`10.184.17.155`）连接。串流没有认证或加密，限可信内网使用，并确保该服务器的 WebRTC
+串流端口可从客户端访问。
 
 ## 无桌面录像
 
