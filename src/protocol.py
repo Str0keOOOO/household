@@ -1,4 +1,8 @@
-"""Validation for the first unified planner observation protocol."""
+"""Validation for the first unified planner observation protocol.
+
+Camera extrinsics are ``T_base_camera`` matrices mapping the protocol's RDF
+camera axes (right, down, forward) into the R1 Pro base frame.
+"""
 
 from __future__ import annotations
 
@@ -81,4 +85,3 @@ def validate_planner_observation(observation: Mapping[str, Any]) -> None:
         raise ProtocolValidationError(f"state must be a non-empty 1D vector, got {state.shape}")
     if not isinstance(observation["prompt"], str):
         raise ProtocolValidationError(f"prompt must be str, got {type(observation['prompt']).__name__}")
-

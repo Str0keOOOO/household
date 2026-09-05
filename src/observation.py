@@ -3,7 +3,8 @@
 Pure NumPy, no simulator imports. The planner observation schema
 (``protocol.py``) carries one RGBD image plus 3x3 intrinsics and a 4x4
 ``T_base_camera`` extrinsic per camera, which is enough to reconstruct a
-per-camera point cloud expressed in the R1 Pro base frame:
+per-camera point cloud expressed in the R1 Pro base frame. Camera-frame
+coordinates follow the protocol's RDF convention (right, down, forward):
 
     p_cam = K^-1 * [u * d, v * d, d]
     p_base = R @ p_cam + t        with (R, t) from T_base_camera
@@ -67,7 +68,7 @@ def to_base_frame(points_camera: np.ndarray, T_base_camera: np.ndarray) -> np.nd
     Args:
         points_camera: float32 ... x 3 camera-frame coordinates in meters.
         T_base_camera: float32 4 x 4 homogeneous transform such that
-            ``X_base = T_base_camera @ X_camera``.
+            ``X_base = T_base_camera @ X_camera_RDF``.
 
     Returns:
         float32 ... x 3 base-frame coordinates in meters.

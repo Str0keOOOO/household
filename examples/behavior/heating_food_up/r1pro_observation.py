@@ -33,6 +33,13 @@ R1PRO_CAMERA_LINKS = {
 # All three simulated camera streams retain every finite depth value.
 INVALID_DEPTH_M = np.float32(10.0)
 
+# VisionSensor RGB-D follows the normal image-camera convention: +X right,
+# +Y down, +Z forward (RDF). USD Camera prim transforms instead use +X right,
+# +Y up, +Z back (RUB). This maps an RDF point into the corresponding USD
+# camera frame. It is deliberately applied once when producing the unified
+# ``T_base_camera`` protocol transform, rather than in each downstream user.
+_USD_RUB_FROM_RDF = np.diag([1.0, -1.0, -1.0, 1.0]).astype(np.float32)
+
 
 def _as_numpy(value: Any) -> np.ndarray:
     if hasattr(value, "detach"):
@@ -260,6 +267,20 @@ def _world_transform_from_usd_camera(
     return world_transform.astype(np.float32)
 
 
+def _usd_camera_transform_to_rdf(T_base_usd_camera: np.ndarray) -> np.ndarray:
+    """Convert ``T_base_usd_camera`` to the protocol's RDF camera frame.
+
+    Returned transforms always obey ``p_base = T_base_camera @ p_rdf`` for a
+    point obtained by normal RGB-D backprojection. Keeping that convention in
+    the protocol makes the visualizer, point-cloud reconstruction, and future
+    planner code independent of USD's camera-axis convention.
+    """
+    transform = np.asarray(T_base_usd_camera, dtype=np.float32)
+    if transform.shape != (4, 4):
+        raise RuntimeError(f"USD camera transform must have shape (4, 4), got {transform.shape}")
+    return (transform @ _USD_RUB_FROM_RDF).astype(np.float32)
+
+
 @dataclass(frozen=True)
 class _CameraMetadata:
     name: str
@@ -321,7 +342,11 @@ def _camera_raw_data(
         camera_name=metadata.name,
         on_stage=on_stage,
     )
-    T_base_camera = (np.linalg.inv(base_world_transform) @ world_camera_transform).astype(np.float32)
+    T_base_usd_camera = (np.linalg.inv(base_world_transform) @ world_camera_transform).astype(np.float32)
+    # ``depth`` is later backprojected in RDF axes, so normalize the USD RUB
+    # camera transform here. All consumers then receive a single unambiguous
+    # convention: p_base = T_base_camera @ p_rdf.
+    T_base_camera = _usd_camera_transform_to_rdf(T_base_usd_camera)
     return rgb, depth_m, metadata.intrinsic_matrix, T_base_camera
 
 
