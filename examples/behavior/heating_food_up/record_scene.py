@@ -402,7 +402,7 @@ def image_information_score(frame: np.ndarray) -> float:
 
 
 def position_task_camera(
-    env, robot_position: np.ndarray, camera_view: str
+    env, robot_position: np.ndarray, camera_view: str, *, verbose: bool = True
 ) -> tuple[np.ndarray, list[str], str, np.ndarray, dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Select a generic, unobstructed-looking overview camera for the task."""
     target, names = task_focus_point(env, robot_position)
@@ -444,7 +444,8 @@ def position_task_camera(
             og.sim.render()
         frame = frame_from_camera(camera)
         score = image_information_score(frame)
-        print(f"Camera view={label}:{score:.2f} (settled)", flush=True)
+        if verbose:
+            print(f"Camera view={label}:{score:.2f} (settled)", flush=True)
         return target, names, label, frame, {label: frame}, candidate_positions
 
     choices = []
@@ -462,12 +463,13 @@ def position_task_camera(
     # highest-information robot-relative candidate for the third-person view.
     score, label, camera_position, frame = max(choices, key=lambda choice: choice[0])
     camera.set_position_orientation(position=camera_position, orientation=look_at_quaternion(camera_position, target))
-    print(
-        "Camera candidates="
-        + ",".join(f"{candidate_label}:{candidate_score:.2f}" for candidate_score, candidate_label, _, _ in choices)
-        + f" selected={label}:{score:.2f}",
-        flush=True,
-    )
+    if verbose:
+        print(
+            "Camera candidates="
+            + ",".join(f"{candidate_label}:{candidate_score:.2f}" for candidate_score, candidate_label, _, _ in choices)
+            + f" selected={label}:{score:.2f}",
+            flush=True,
+        )
     return (
         target,
         names,

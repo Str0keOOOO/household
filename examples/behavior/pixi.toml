@@ -1,0 +1,14 @@
+[workspace]
+name = "household-behavior"
+version = "0.1.0"
+description = "BEHAVIOR v3.7.2 / OmniGibson / Isaac Sim 4.5 R1 Pro integration."
+channels = ["conda-forge", "pytorch", "nvidia"]
+platforms = ["linux-64"]
+
+[tasks]
+setup-behavior = { cmd = "cd ../.. && pixi run setup-behavior" }
+demo = { cmd = "PYTHONPATH=../../src:. OMNIGIBSON_DATA_PATH=$PIXI_PROJECT_ROOT/data/omnigibson OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 conda run --no-capture-output -p .conda python -m omnigibson.examples.environments.behavior_env_demo" }
+streaming-demo = { cmd = "PYTHONPATH=../../src:. OMNIGIBSON_DATA_PATH=$PIXI_PROJECT_ROOT/data/omnigibson OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 conda run --no-capture-output -p .conda python heating_food_up/streaming_demo.py" }
+rollout = { cmd = "PYTHONPATH=../../src:. OMNIGIBSON_DATA_PATH=$PIXI_PROJECT_ROOT/data/omnigibson OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 conda run --no-capture-output -p .conda python heating_food_up/rollout.py" }
+episode-server = { cmd = "PYTHONPATH=../../src:. OMNIGIBSON_DATA_PATH=$PIXI_PROJECT_ROOT/data/omnigibson OMNI_KIT_ACCEPT_EULA=YES OMNIGIBSON_HEADLESS=1 conda run --no-capture-output -p .conda python heating_food_up/episode_server.py" }
+episode = { cmd = "PYTHONPATH=../../src:. conda run --no-capture-output -p .conda python heating_food_up/episode_client.py" }

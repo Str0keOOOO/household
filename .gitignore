@@ -1,10 +1,19 @@
-# Project-local data and runtime output. None of these are source.
-data/
-runs/
+# Generated BEHAVIOR data and runtime output. None of these are source.
+examples/behavior/data/
+examples/behavior/runs/
+/runs/
+
+# Root Pixi owns only the shared planner environment. BEHAVIOR is managed by
+# the official Conda setup and stored at this ignored prefix.
+/.pixi/
+/examples/behavior/.conda/
 
 # Python and editor by-products.
 __pycache__/
 *.py[cod]
+*.egg-info/
+build/
+dist/
 .pytest_cache/
 .mypy_cache/
 .vscode/

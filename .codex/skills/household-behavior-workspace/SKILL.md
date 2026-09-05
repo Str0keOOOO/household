@@ -14,19 +14,23 @@ for its owner to inspect.
 - Treat the workspace root as the integration Git repository.
 - Keep third-party source under `third_party/` as Git submodules. Do not copy a Git
   repository into the workspace as ordinary files.
-- Never edit files below `third_party/BEHAVIOR-1K/`. Local integrations belong in
-  `scripts/`, `src/`, `docs/`, or other top-level workspace files.
+- Never edit files below `third_party/BEHAVIOR-1K/`. BEHAVIOR / OmniGibson / R1 Pro
+  simulation integrations belong under `examples/behavior/`; simulator-independent
+  local code belongs under `src/`.
 - Make focused commits for completed changes. Do not commit generated output, downloaded
-  assets, caches, encryption keys, or Conda environments.
-- Before destructive cleanup, identify exact files. Generated files in `runs/` may be
-  removed when requested; do not remove shared dataset assets or task-instance packages
-  merely because a particular demo no longer uses them.
+  assets, caches, encryption keys, or Pixi environments.
+- Before destructive cleanup, identify exact files. Generated files in
+  `examples/behavior/runs/` may be removed when requested; do not remove shared dataset
+  assets or task-instance packages merely because a particular demo no longer uses them.
 
 ## Environment, versions, and data
 
-- Use the normal Anaconda installation at `/home/xuchenfei/anaconda3`; do not place a
-  Conda installation or environment inside this repository. Use `scripts/env.sh` before
-  activating the documented environment.
+- This repository has independent Pixi projects: the root `pixi.toml` manages only
+  simulator-agnostic core code; `examples/behavior/pixi.toml` manages BEHAVIOR / OmniGibson /
+  Isaac Sim; `examples/r1pro_real/pixi.toml` is reserved for a physical robot environment.
+  Keep each generated `.pixi/` directory ignored. The BEHAVIOR Pixi project must depend on
+  the root `household-core` package through an editable local path rather than copying core
+  source into the example.
 - Prefer the newest BEHAVIOR version actually supported by this server's OS, GPU driver,
   and Isaac Sim requirements. Pin the chosen upstream release in the submodule and record
   the decision in `versions.lock` and `docs/SOURCES.md`.
@@ -39,12 +43,16 @@ for its owner to inspect.
 ## Local structure and documentation
 
 - Keep shell launchers directly under `scripts/`; do not add script subdirectories.
-- Keep nontrivial local Python implementations under `src/` and let launchers call them.
+- Keep BEHAVIOR / OmniGibson / R1 Pro Python implementations under
+  `examples/behavior/` and let launchers call them. Reserve `src/` for nontrivial
+  simulator-independent local Python implementations.
 - Write repository documentation in Chinese. Update the root README and the relevant
   script documentation when a command, supported task, output location, or version
   decision changes.
-- Separate generated videos and logs under `runs/videos/` and `runs/logs/`. State whether
-  a video is only an initialized-scene preview or a genuine task-completion rollout.
+- Keep BEHAVIOR licensed data and task instances under `examples/behavior/data/`, and
+  generated videos and logs under `examples/behavior/runs/videos/` and
+  `examples/behavior/runs/logs/`. State whether a video is only an initialized-scene
+  preview or a genuine task-completion rollout.
 - For the R1 Pro visual loop, keep the first frame stable and make any diagnostic motion
   explicit and reproducible: sample from the normalized action space with a fixed seed,
   then apply a small multiplier such as `action * 0.04`. Do not describe this jitter

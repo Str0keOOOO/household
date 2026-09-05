@@ -1,0 +1,21 @@
+[workspace]
+name = "household-core"
+version = "0.1.0"
+description = "Simulator-agnostic Household planner, protocol, and serving environment."
+channels = ["conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = ">=3.10,<3.14"
+numpy = ">=1.26,<2"
+msgpack-python = ">=1.1,<2"
+websockets = ">=15,<17"
+setuptools = ">=68,<81"
+rerun-sdk = ">=0.37.0,<0.38"
+
+[tasks]
+server = "python scripts/server.py --mock"
+setup-behavior = "bash examples/behavior/setup_behavior.sh"
+
+# Future AnyGrasp, the new cuRobo planner, grasp ranking, and retreat planning
+# belong in this project only. BEHAVIOR / OmniGibson dependencies do not.

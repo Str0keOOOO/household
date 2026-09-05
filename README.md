@@ -1,34 +1,30 @@
 # Household robotics simulation workspace
 
-This repository is the reproducible workspace for installing and exercising
-BEHAVIOR-1K / OmniGibson for household-service-robot simulation. It is deliberately
-an integration repository: upstream source is preserved as a Git submodule, while
-local scripts configure the standard per-user Anaconda environment, download
-licensed assets, and run examples.
+这是 household 的多 Pixi project 工作区。根项目只承载通用 planner / protocol / WebSocket
+代码；BEHAVIOR 仿真是一个按需安装的独立项目。上游源码始终是子模块，未复制到本仓库的 `src/`。
 
 ## Layout
 
 ```text
 .
-├── third_party/BEHAVIOR-1K/   # Unmodified upstream Git submodule
-├── scripts/                   # Local shell setup, diagnostic, and demo launchers
-├── src/                       # Local Python implementations called by scripts
-├── config/                    # Local-only tool configuration templates
-├── data/                      # Downloaded BEHAVIOR assets (ignored by Git)
-│   └── omnigibson/
-│       ├── 2025-challenge-task-instances/  # Official pre-sampled instances
-│       └── local-task-instances/            # Locally sampled, persistent instances
-└── runs/                      # Generated output: videos/ and logs/ (ignored by Git)
+├── pixi.toml / pixi.lock              # 核心 planner 环境（独立，锁文件由 pixi lock 生成）
+├── pyproject.toml                     # household-core 的 editable 包元数据
+├── src/                               # 通用 protocol、serving、planner
+├── examples/
+│   ├── behavior/                      # 独立的 BEHAVIOR integration Pixi project
+│   │   ├── pixi.toml / pixi.lock      # BEHAVIOR 3.7.2 / Isaac Sim 4.5（独立锁文件）
+│   │   ├── data/omnigibson/          # Licensed assets and task instances (ignored by Git)
+│   │   ├── runs/                     # Generated videos and logs (ignored by Git)
+│   │   ├── r1pro/                    # R1 Pro example entrypoints
+│   │   └── heating_food_up/          # Task, adapter, recording, and rollout
+├── scripts/                          # Installation and stable launch entrypoints
+└── third_party/BEHAVIOR-1K/          # Unmodified upstream Git submodule
 ```
 
-Only source, scripts, documentation, configuration templates, and Git submodule
-pointers are version-controlled. The Anaconda Distribution and the `behavior`
-environment are intentionally held at `/home/xuchenfei/anaconda3`; encrypted
-BEHAVIOR assets, decryption keys, and generated output are excluded from Git.
-Isaac Sim's shared cache, pip, PyTorch, CUDA, and other general third-party
-caches follow their normal user-level locations. OmniGibson app data follows its
-upstream default at `third_party/BEHAVIOR-1K/OmniGibson/appdata/`, which the
-upstream submodule itself ignores.
+依赖方向固定为：`examples/behavior` → editable 本地 `household-core` → 根目录 `src/`。
+因此 BEHAVIOR client 可以直接 `import protocol` 和 `serving`，但不会复制通用通信代码。
+根目录的 Pixi 环境只承载通用 planner；BEHAVIOR 环境由官方 Conda 流程创建在
+`examples/behavior/.conda/`。BEHAVIOR 资产、密钥和运行输出仍不提交。
 
 ## Version policy
 
@@ -41,40 +37,93 @@ platform support starts at Ubuntu 22.04; it is deliberately not forced here.
 
 Exact version observations are in [versions.lock](versions.lock).
 
-## Normal workflow
+## 安装与运行
+
+只需 planner 时，只在根目录安装：
 
 ```bash
 cd /data6/xuchenfei/household
-./setup.sh bootstrap
-# After explicitly accepting the listed licenses:
-./setup.sh install --accept-licenses
-# Finite, non-interactive verification (safe on this headless server):
-./scripts/official_quickstart.sh --smoke
-./scripts/r1pro_behavior_demo.sh --smoke
-# 在无桌面服务器生成可下载观看的 MP4：
-./scripts/r1pro_record_demo.sh
-# 生成 heating_food_up 的初始化场景视频：
-./scripts/r1pro_heating_food_scene.sh
-# 生成可复现的随机小幅抖动录像：
-./scripts/r1pro_heating_food_scene.sh --random-jitter --jitter-scale 0.04 --seed 20260901 --frames 120 --fps 20
+pixi install
+pixi run server
 ```
 
-`install --accept-licenses` is intentionally an explicit opt-in: it accepts the
-Conda terms, NVIDIA Isaac Sim EULA, and BEHAVIOR dataset license on the caller's
-behalf. The daily upstream commands and their optional local wrappers are listed
-in [scripts/README.md](scripts/README.md).
+需要仿真时，使用 Pixi 统一入口调用 BEHAVIOR 官方 Conda 安装流程。运行前请自行确认
+NVIDIA 与 BEHAVIOR 许可证；它不下载受许可的 BEHAVIOR 场景资产。
+
+```bash
+cd /data6/xuchenfei/household
+pixi run setup-behavior
+cd examples/behavior
+pixi run demo
+```
+
+安装结果固定在 `examples/behavior/.conda/`。`setup-behavior` 先按官方顺序创建
+Python 3.10 Conda prefix、安装官方指定的 numpy/setuptools 和 CUDA 12.4 PyTorch，
+再调用 `third_party/BEHAVIOR-1K/setup.sh --bddl --omnigibson` 安装 BDDL、OmniGibson
+和 Isaac Sim；Pixi 不参与 BEHAVIOR 依赖解析。
+
+上游 `setup.sh` 的可选组件仍可在目标 Conda prefix 中按官方文档单独安装；当前统一入口默认
+不下载数据集或安装这些组件。安装完成后，在 `examples/behavior` 目录运行仿真入口：
+
+```bash
+pixi run demo
+pixi run streaming-demo
+```
+
+planner server 则在根项目运行 `pixi run server`。
+
+要让一次有限时长的录制同时连接 planner（需要另一个终端先运行根项目 server）：
+
+```bash
+# terminal 1
+cd /data6/xuchenfei/household
+pixi run server
+
+# terminal 2
+cd /data6/xuchenfei/household/examples/behavior
+pixi run rollout --frames 200 --fps 20
+```
+
+`rollout` 会启动 Pixi 环境中的 Isaac Sim、恢复 `heating_food_up` 场景；每个周期采集一次
+R1 Pro `raw_obs`，经过 `BehaviorR1ProAdapter` 后阻塞调用 WebSocket planner，再在 BEHAVIOR
+本地逐步执行完整 action chunk，最后才进入下一周期。WebSocket 在整个 rollout 中保持长连接，
+`--frames` 表示完整的 plan/execute 周期数；录像写入 `runs/videos/`，达到周期数或任务结束后自动关闭。
+
+### 常驻 episode server(多轮任务免冷启动)
+
+`rollout` 每轮都会重新启动 Isaac Sim 并重新加载整栋房子场景，冷启动约 3 分钟。需要由外层
+脚本/评测框架连续跑多轮时，先把仿真端常驻（控制接口在
+`examples/behavior/heating_food_up/episode_server.py`），只有第一轮付完整冷启动，
+后续每轮只付 `env.reset()`：
+
+```bash
+# terminal 1:planner server(不变)
+cd /data6/xuchenfei/household
+pixi run server
+
+# terminal 2:常驻仿真服务,加载完成后打印 Environment ready,保持运行
+cd /data6/xuchenfei/household/examples/behavior
+pixi run episode-server
+
+# terminal 3:每轮一个轻量请求(秒级启动,不导入 OmniGibson/Isaac Sim)
+pixi run episode --frames 200 --fps 20
+```
+
+`episode-server` 默认监听 `ws://0.0.0.0:8100`；场景/任务/分辨率在启动时固定，每轮可改
+`frames/fps/prompt/robot_posture/camera_view/output`，请求排队串行执行。详见
+`examples/behavior/README.md` 的「常驻 episode server」一节。
 
 ## 本地任务实例与录像
 
-`data/omnigibson/2025-challenge-task-instances/` 是下载的官方预采样任务包；不要
+`examples/behavior/data/omnigibson/2025-challenge-task-instances/` 是下载的官方预采样任务包；不要
 修改其中的内容。对官方包中没有预采样模板的任务（目前是 `heating_food_up`），本仓库
 会将一次成功的本地采样结果保存到
-`data/omnigibson/local-task-instances/`。保存的是完整场景 JSON，之后加载该 JSON，
+`examples/behavior/data/omnigibson/local-task-instances/`。保存的是完整场景 JSON，之后加载该 JSON，
 不再重新在线采样，因此同一台服务器上的运行可复现。
 
-该目录和 `data/` 的其余内容一样受 BEHAVIOR 数据许可约束，已被 Git 忽略；Git 只
+该目录和 `examples/behavior/data/` 的其余内容一样受 BEHAVIOR 数据许可约束，已被 Git 忽略；Git 只
 记录生成脚本、所选场景/模型和随机种子；本地 manifest 记录校验值，不能重新分发任务 JSON。录像不放在数据目录，
-统一写到 `runs/videos/`，对应日志写到 `runs/logs/`。这样可以清理录像而不影响已保存的
+统一写到 `examples/behavior/runs/videos/`，对应日志写到 `examples/behavior/runs/logs/`。这样可以清理录像而不影响已保存的
 任务实例，也可以重录视频而不改变场景。
 
 ## 渲染与光影
@@ -104,7 +153,8 @@ Isaac Sim 4.5 安装**，不可将其视为可用服务：
 浏览器页面。使用本仓库的专用启动器：
 
 ```bash
-./scripts/r1pro_heating_food_streaming.sh
+cd /data6/xuchenfei/household/examples/behavior
+pixi run streaming-demo
 ```
 
 它只启动场景和已安装的 `omni.kit.livestream.webrtc` 扩展，不生成 MP4，也没有时长参数；在自己的
@@ -116,14 +166,89 @@ Isaac Sim 4.5 安装**，不可将其视为可用服务：
 若只需稳定地观察或留存一次运行，不必配置远程串流：
 
 ```bash
-./scripts/r1pro_record_demo.sh
+cd /data6/xuchenfei/household/examples/behavior
+pixi run python tools/run_with_isaacsim.py r1pro/record_demo.py --output /path/to/output.mp4
 ```
 
 该本地启动器沿用上游 R1 Pro BEHAVIOR 示例的预采样场景、任务配置和相机位姿，在
 无界面模式将 viewer camera 输出写入忽略的
-`runs/videos/r1pro-behavior-<UTC 时间>.mp4`。
+`examples/behavior/runs/videos/r1pro-behavior-<UTC 时间>.mp4`。
 它不会修改 `third_party/BEHAVIOR-1K/`。可用 `--steps 40 --frame-stride 2` 缩短演示，
 或用 `--width 640 --height 360` 控制分辨率。
+
+## Planner 通信接口
+
+`examples/behavior/heating_food_up/adapter.py` 将 BEHAVIOR 的 plain `raw_obs` 转成统一的
+`planner_obs`；其 RGBD 均为 `H x W x 4 float32`，RGB 在 `[0, 1]`，depth 为 meter。`state` 的
+固定 27 维顺序由 `STATE_LAYOUT` 定义。当前 `server` 使用 `MockPlanner` 返回 `(4, 12) float32`
+小幅连续 action chunk，后续可直接替换为真实 planner。通信采用长期 WebSocket 连接和 MessagePack +
+NumPy 二进制编码；`rollout.py` 是真实 BEHAVIOR 场景的同步有限录制入口，执行前将 12 维 planner
+action 映射到 23 维 OmniGibson scene action（base 和左臂暂时为零），`client.py` 保留为未来
+从已初始化机器人调用一次 planner 的轻量封装。
+
+## Planner 模块与第三方源码
+
+核心算法保持在固定的 `src/planner/` 边界内，不再新增 `perception/` 或
+`planning/` 顶层包：
+
+```text
+src/
+├── protocol.py
+├── serving/
+└── planner/
+    ├── __init__.py
+    ├── base.py
+    ├── mock.py
+    ├── anygrasp.py
+    ├── curobo.py
+    ├── grasp_ranking.py
+    └── retreat_planning.py
+```
+
+各模块职责是：`base.py` 定义统一 `infer(obs) -> {"actions": actions}` 接口；
+`mock.py` 提供当前 WebSocket 联调的平滑 MockPlanner；`anygrasp.py` 是只输出统一
+grasp candidates 的薄 adapter；`grasp_ranking.py` 负责后续候选排序；`curobo.py`
+负责后续轨迹/action chunk 规划；`retreat_planning.py` 负责抓取后的安全撤出；
+`__init__.py` 导出公共接口。WebSocket server 只依赖统一 planner 接口，不直接导入
+第三方实现。
+
+后续真实规划的数据流保持为：
+
+```text
+WebSocket Server
+      ↓ planner.infer(obs)
+AnyGraspAdapter
+      ↓ grasp candidates
+GraspRanker
+      ↓ selected grasp
+CuRoboPlanner
+      ↓ joint trajectory / action chunk
+RetreatPlanner
+      ↓ actions
+```
+
+第三方源码只放在 `third_party/`：
+
+```text
+third_party/BEHAVIOR-1K/  # simulation dependency
+third_party/anygrasp/     # grasp perception dependency
+third_party/curobo/       # motion planning dependency
+```
+
+AnyGrasp 和 cuRobo 的源码版本由 Git submodule commit 固定；不修改第三方目录内部源码，
+也不让实验代码隐式跟随 `main`。完整克隆时使用：
+
+```bash
+git clone --recursive <repo>
+git submodule update --init --recursive
+```
+
+需要手动补齐两个 submodule 时使用官方仓库：
+
+```bash
+git submodule add https://github.com/NYU-robot-learning/anygrasp.git third_party/anygrasp
+git submodule add https://github.com/NVlabs/curobo.git third_party/curobo
+```
 
 ## Repository rules
 
@@ -131,15 +256,13 @@ Isaac Sim 4.5 安装**，不可将其视为可用服务：
 - Do not edit files below `third_party/BEHAVIOR-1K/`. Local integration work belongs
   in this repository outside that path.
 - Do not commit downloaded datasets, decryption keys, environments, caches, or
-  generated output. The dataset license also prohibits redistribution.
-- Do not modify global Git, Pip, OS, or driver configuration. Anaconda is at
-  `/home/xuchenfei/anaconda3`, using its standard `envs/behavior` environment
-  path. At the user's request, its standard `conda init bash` hook is present in
-  `/home/xuchenfei/.bashrc` so new Bash shells can use `conda activate behavior`.
+      generated output. The dataset license also prohibits redistribution.
+- Do not modify global Git, Pip, Pixi, OS, or driver configuration. The BEHAVIOR
+      environment is the ignored `examples/behavior/.conda/` prefix.
 
 ## Current status
 
-Installation is complete. The finite, headless smoke tests for both the official
-quickstart and the bundled R1Pro BEHAVIOR task completed successfully on 2026-08-31
-with an unmodified upstream submodule. The environment is at the standard Anaconda
-location.
+BEHAVIOR-1K v3.7.2 remains an unmodified submodule. The current installation path
+uses the root `pixi run setup-behavior` task as a wrapper around the official Conda
+flow; Isaac Sim 4.5 and the BEHAVIOR dependencies are installed into
+`examples/behavior/.conda/`, outside the Pixi solver input.

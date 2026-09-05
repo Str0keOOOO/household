@@ -4,13 +4,13 @@ BEHAVIOR_1K_TAG=v3.7.2
 BEHAVIOR_1K_COMMIT=88454bd04f75dc57c00ab1f1a00bcde1ff505950
 BEHAVIOR_1K_UPSTREAM=https://github.com/StanfordVL/BEHAVIOR-1K.git
 
-# v3.7.2's setup script creates Python 3.10 and installs this simulator stack.
-# Resolved values below were captured after the successful local install.
+# The independent BEHAVIOR Pixi project pins this Python / simulator stack.
 PYTHON_VERSION=3.10
 PYTHON_RESOLVED_VERSION=3.10.21
-CONDA_VERSION=26.5.3
 ISAAC_SIM_VERSION=4.5.0
 ISAAC_SIM_PACKAGE_VERSION=4.5.0.0
+ISAAC_SIM_INSTALL_METHOD=behavior_pip_wheels_via_pixi_setup
+ISAAC_SIM_LEGACY_GLIBC_WORKAROUND=manylinux_2_34_to_manylinux_2_31
 OMNIGIBSON_PACKAGE_VERSION=3.7.2
 BDDL_PACKAGE_VERSION=3.7.0
 PYTORCH_VERSION=2.6.0+cu124
@@ -21,10 +21,5 @@ HUGGINGFACE_HUB_VERSION=1.29.0
 HF_XET_VERSION=1.6.0
 SOCKSIO_VERSION=1.0.0
 
-# Official Anaconda Distribution bootstrap pinned to the latest release checked on 2026-08-31.
-ANACONDA_RELEASE=2026.07-1
-ANACONDA_INSTALLER=Anaconda3-2026.07-1-Linux-x86_64.sh
-ANACONDA_INSTALLER_SHA256=9f49042048e9a8220c1cddf9192054290724052d3b2a86f938f9f5edd911db8f
-
-# Hardware selection is a default only; callers may override OMNIGIBSON_GPU_ID.
+# Pixi activation default for this workspace's simulator tasks.
 DEFAULT_OMNIGIBSON_GPU_ID=1
