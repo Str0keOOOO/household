@@ -24,6 +24,8 @@ except ImportError:
 
 DEFAULT_TASK = "heating_food_up"
 DEFAULT_SCENE = "house_single_floor"
+R1PRO_VISION_IMAGE_WIDTH = 256
+R1PRO_VISION_IMAGE_HEIGHT = 256
 
 CAMERA_VIEW_CHOICES = (
     "near_right",
@@ -103,14 +105,18 @@ def build_environment(og: Any, yaml_module: Any, args: Any):
             "modalities": ["rgb", "depth"],
             "enabled": True,
             "sensor_kwargs": {
-                "image_height": 128,
-                "image_width": 128,
+                # OmniGibson configures all attached R1 Pro VisionSensors as
+                # one class, so this shared render resolution applies to the
+                # ZED, left wrist, and right wrist cameras.
+                "image_height": R1PRO_VISION_IMAGE_HEIGHT,
+                "image_width": R1PRO_VISION_IMAGE_WIDTH,
             },
         }
     }
     print(
         "stage=robot_sensor_config_ready "
-        "scene.include_robots=False modalities=rgb,depth VisionSensor.enabled=True",
+        "scene.include_robots=False modalities=rgb,depth VisionSensor.enabled=True "
+        f"resolution={R1PRO_VISION_IMAGE_WIDTH}x{R1PRO_VISION_IMAGE_HEIGHT}",
         flush=True,
     )
     config["task"].update(

@@ -80,13 +80,13 @@ pixi run server
 
 # terminal 2
 cd /data6/xuchenfei/household/examples/behavior
-pixi run rollout --frames 200 --fps 20
+pixi run rollout --cycles 200 --fps 20
 ```
 
 `rollout` 会启动 Pixi 环境中的 Isaac Sim、恢复 `heating_food_up` 场景；每个周期采集一次
 R1 Pro `raw_obs`，经过 `BehaviorR1ProAdapter` 后阻塞调用 WebSocket planner，再在 BEHAVIOR
 本地逐步执行完整 action chunk，最后才进入下一周期。WebSocket 在整个 rollout 中保持长连接，
-`--frames` 表示完整的 plan/execute 周期数；录像写入 `runs/videos/`，达到周期数或任务结束后自动关闭。
+`--cycles` 表示完整的 plan/execute 周期数；录像写入 `runs/videos/`，达到周期数或任务结束后自动关闭。
 
 ### 常驻 episode server(多轮任务免冷启动)
 
@@ -105,11 +105,11 @@ cd /data6/xuchenfei/household/examples/behavior
 pixi run episode-server
 
 # terminal 3:每轮一个轻量请求(秒级启动,不导入 OmniGibson/Isaac Sim)
-pixi run episode --frames 200 --fps 20
+pixi run episode --cycles 200 --fps 20
 ```
 
 `episode-server` 默认监听 `ws://0.0.0.0:8100`；场景/任务/分辨率在启动时固定，每轮可改
-`frames/fps/prompt/robot_posture/camera_view/output`，请求排队串行执行。详见
+`cycles/fps/prompt/robot_posture/camera_view/output`，请求排队串行执行。详见
 `examples/behavior/README.md` 的「常驻 episode server」一节。
 
 ## 本地任务实例与录像
@@ -128,13 +128,12 @@ pixi run episode --frames 200 --fps 20
 ## 渲染与光影
 
 本地场景录像使用 RTX `RealTimePathTracing` 实时光线追踪模式，保留光照、阴影、反射和
-间接漫反射，并启用 DLSS Quality。第三人称视频默认 1280×720，原生相机视频的三个面板
-默认各为 480×480；三个面板来自 R1 Pro USD 中固定相对路径
-`left_realsense_link/Camera`、`zed_link/Camera`、`right_realsense_link/Camera` 的独立 RGB
-render product，不是移动的 viewer camera。它们不是开销显著更高的
-离线路径追踪。服务器的 RTX A6000 可运行此模式。
+间接漫反射，并启用 DLSS Quality。第三人称视频默认 1280×720。planner 采集的三路 R1 Pro
+VisionSensor（`left_realsense_link/Camera`、`zed_link/Camera`、`right_realsense_link/Camera`）
+统一渲染为 256×256 RGB-D；它们不是移动的 viewer camera，也不是开销显著更高的离线路径追踪。
+服务器的 RTX A6000 可运行此模式。
 
-R1 Pro 录制初始姿态采用 `tuck`（双臂收拢）设置；这只是初始化姿态，不代表机器人已经执行任务。
+R1 Pro 录制初始姿态默认采用 `untuck`（双臂展开）设置；这只是初始化姿态，不代表机器人已经执行任务。
 原生腕部相机仍会输出画面，且其视野会随双臂姿态改变。
 
 `heating_food_up` 的本地配置会在加载基础任务实例后打开指定冰箱，并将汉堡通过物理落体落在
@@ -152,7 +151,7 @@ pixi run server
 
 # terminal 2
 cd /data6/xuchenfei/household/examples/behavior
-pixi run rollout --frames 200 --fps 20
+pixi run rollout --cycles 200 --fps 20
 ```
 
 录像写入忽略的 `examples/behavior/runs/videos/`，对应日志写入

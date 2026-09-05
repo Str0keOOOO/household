@@ -30,7 +30,7 @@ R1PRO_CAMERA_LINKS = {
 # Omniverse's distance-to-camera annotator uses ``+inf`` for rays that do not
 # hit scene geometry. The planner protocol requires finite meter values, so a
 # missing return is represented by this documented far-depth value instead.
-# Valid finite depth values are never scaled or clipped here.
+# All three simulated camera streams retain every finite depth value.
 INVALID_DEPTH_M = np.float32(10.0)
 
 

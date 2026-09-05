@@ -63,7 +63,7 @@ except ImportError:
     )
     from r1pro_observation import R1ProObservationCollector
 REQUEST_KEYS = frozenset(
-    {"type", "frames", "fps", "output", "prompt", "robot_posture", "camera_view"}
+    {"type", "cycles", "fps", "output", "prompt", "robot_posture", "camera_view"}
 )
 
 
@@ -76,7 +76,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--scene", default=DEFAULT_SCENE, help=f"OmniGibson scene model (default: {DEFAULT_SCENE})")
     parser.add_argument("--scene-file", type=Path, default=_default_instance(root))
     parser.add_argument("--initialization-config", type=Path, default=root / "heating_food_up" / "config.json")
-    parser.add_argument("--robot-posture", choices=("tuck", "untuck"), default="tuck")
+    parser.add_argument("--robot-posture", choices=("tuck", "untuck"), default="untuck")
     parser.add_argument("--camera-view", choices=CAMERA_VIEW_CHOICES, default="near_right")
     parser.add_argument("--width", type=int, default=1280)
     parser.add_argument("--height", type=int, default=720)
@@ -143,9 +143,9 @@ def _validate_payload(payload: object) -> dict[str, object]:
         )
     if payload["type"] != "run_episode":
         raise ValueError(f"unsupported episode request type: {payload['type']}")
-    frames, fps = payload["frames"], payload["fps"]
-    if not isinstance(frames, int) or isinstance(frames, bool) or frames <= 0:
-        raise ValueError("frames must be a positive integer")
+    cycles, fps = payload["cycles"], payload["fps"]
+    if not isinstance(cycles, int) or isinstance(cycles, bool) or cycles <= 0:
+        raise ValueError("cycles must be a positive integer")
     if not isinstance(fps, int) or isinstance(fps, bool) or fps <= 0:
         raise ValueError("fps must be a positive integer")
     output = payload["output"]
@@ -161,7 +161,7 @@ def _validate_payload(payload: object) -> dict[str, object]:
     if camera_view not in CAMERA_VIEW_CHOICES:
         raise ValueError(f"camera_view must be one of {CAMERA_VIEW_CHOICES}")
     return {
-        "frames": frames,
+        "cycles": cycles,
         "fps": fps,
         "output": str(Path(output).resolve()),
         "prompt": prompt,
@@ -196,7 +196,7 @@ def start_control_server(args: argparse.Namespace, pending: _PendingQueue) -> No
                 request = _EpisodeRequest(payload)
                 pending.put(request)
                 print(
-                    f"Episode request queued: frames={payload['frames']} output={payload['output']}",
+                    f"Episode request queued: cycles={payload['cycles']} output={payload['output']}",
                     flush=True,
                 )
                 request.wait()
@@ -221,7 +221,7 @@ def run_episode(env, og, planner_client, adapter, args: argparse.Namespace, payl
     environment already carries its initial task state.
     """
     started = time.monotonic()
-    frames = int(payload["frames"])
+    cycles_requested = int(payload["cycles"])
     fps = int(payload["fps"])
     output = Path(str(payload["output"]))
     prompt = str(payload["prompt"])
@@ -258,7 +258,7 @@ def run_episode(env, og, planner_client, adapter, args: argparse.Namespace, payl
     done = False
     completed_cleanly = False
     try:
-        for cycle_index in range(frames):
+        for cycle_index in range(cycles_requested):
             raw_obs = observation_collector.collect(prompt)
             planner_obs = adapter.to_planner_observation(raw_obs)
             result = planner_client.infer(planner_obs)
@@ -273,7 +273,7 @@ def run_episode(env, og, planner_client, adapter, args: argparse.Namespace, payl
                     f"planner returned invalid action chunk: {getattr(actions, 'shape', None)} / {getattr(actions, 'dtype', None)}"
                 )
             print(
-                f"episode={episode_index} cycle={cycle_index + 1}/{frames} actions="
+                f"episode={episode_index} cycle={cycle_index + 1}/{cycles_requested} actions="
                 f"{np.array2string(actions, precision=4, suppress_small=True, separator=', ')}",
                 flush=True,
             )
@@ -299,7 +299,7 @@ def run_episode(env, og, planner_client, adapter, args: argparse.Namespace, payl
     elapsed = time.monotonic() - started
     print(
         f"episode={episode_index} finished: reset={reset} pose={pose_source} camera={camera_label} "
-        f"cycles={cycles}/{frames} done={done} wall={elapsed:.1f}s video={output}",
+        f"cycles={cycles}/{cycles_requested} done={done} wall={elapsed:.1f}s video={output}",
         flush=True,
     )
     return {"cycles": cycles, "done": done, "output": str(output), "reset": reset}

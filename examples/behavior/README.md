@@ -40,7 +40,7 @@ pixi run server
 
 ```bash
 cd /data6/xuchenfei/household/examples/behavior
-pixi run rollout --frames 200 --fps 20
+pixi run rollout --cycles 200 --fps 20
 ```
 
 这条命令通过 `conda run -p .conda` 使用官方 Conda 环境中的 Isaac Sim，同步执行每个规划周期：
@@ -51,9 +51,12 @@ pixi run rollout --frames 200 --fps 20
 
 planner 返回完整 23 维 OmniGibson action chunk，BEHAVIOR 直接逐步执行其中的 action；执行完成后
 才发送下一次 observation。MockPlanner 目前仅生成 torso、右臂和右夹爪的小幅动作，base 和左侧控制
-维度为零。`--frames` 表示 plan/execute 周期数。录像保存在 `runs/videos/`，BEHAVIOR
+维度为零。`--cycles` 表示 plan/execute 周期数。录像保存在 `runs/videos/`，BEHAVIOR
 侧日志自动保存在 `runs/logs/rollout-<UTC>.log`，同时继续显示在终端。server 默认只
 显示在 server 终端；如需保存 server 日志，可显式传入 `--log-file`。
+
+三路 R1 Pro `VisionSensor` 在环境创建前统一设置为 `256×256`。三路 depth 都只转换为 meter，
+无命中像素以 `10.0 m` 表示；当前不施加距离过滤。
 
 其他入口：
 
@@ -78,7 +81,7 @@ nvidia-smi --query-gpu=index,memory.used,memory.free,utilization.gpu --format=cs
 不期望的行为或崩溃：
 
 ```bash
-env -u CUDA_VISIBLE_DEVICES OMNIGIBSON_GPU_ID=1 pixi run rollout --frames 200 --fps 20
+env -u CUDA_VISIBLE_DEVICES OMNIGIBSON_GPU_ID=1 pixi run rollout --cycles 200 --fps 20
 env -u CUDA_VISIBLE_DEVICES OMNIGIBSON_GPU_ID=1 pixi run episode-server
 ```
 
@@ -103,8 +106,8 @@ cd /data6/xuchenfei/household/examples/behavior
 pixi run episode-server
 
 # terminal 3:每轮请求一个有限时长的 round（秒级启动，不拉起 Isaac Sim）
-pixi run episode --frames 200 --fps 20
-pixi run episode --frames 100 --output /path/to/round-2.mp4 --robot-posture untuck
+pixi run episode --cycles 200 --fps 20
+pixi run episode --cycles 100 --output /path/to/round-2.mp4 --robot-posture untuck
 ```
 
 要点：
@@ -112,7 +115,7 @@ pixi run episode --frames 100 --output /path/to/round-2.mp4 --robot-posture untu
 - `episode-server` 默认监听 `ws://0.0.0.0:8100`，planner 仍连 `ws://127.0.0.1:8000`；
   可用 `--host/--port/--planner-uri` 调整。
 - 场景、任务模板、渲染分辨率在 `episode-server` 启动时固定；每轮可改
-  `--frames/--fps/--prompt/--robot-posture/--camera-view/--output`。
+  `--cycles/--fps/--prompt/--robot-posture/--camera-view/--output`。
 - 每轮结束自动回到该任务模板的初始状态：第一轮直接用刚加载的初始状态（不重复
   `env.reset()`），之后每轮先 `env.reset()` 再重新应用 `heating_food_up/config.json`
   的初始化（开冰箱、汉堡落位、机器人位姿）。

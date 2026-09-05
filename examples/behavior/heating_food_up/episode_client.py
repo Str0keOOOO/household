@@ -37,13 +37,13 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--server-uri", default="ws://127.0.0.1:8100", help="Episode server WebSocket URI")
     parser.add_argument("--output", type=Path, default=None, help="MP4 output (default: behavior runs/videos/UTC.mp4)")
-    parser.add_argument("--frames", type=int, default=200, help="Number of complete plan/execute cycles")
+    parser.add_argument("--cycles", type=int, default=200, help="Number of complete plan/execute cycles")
     parser.add_argument("--fps", type=int, default=20, help="Output video FPS")
     parser.add_argument("--prompt", default=DEFAULT_TASK, help="Task prompt sent to the planner")
-    parser.add_argument("--robot-posture", choices=("tuck", "untuck"), default="tuck")
+    parser.add_argument("--robot-posture", choices=("tuck", "untuck"), default="untuck")
     parser.add_argument("--camera-view", choices=CAMERA_VIEW_CHOICES, default="near_right")
     args = parser.parse_args()
-    for name in ("frames", "fps"):
+    for name in ("cycles", "fps"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name} must be positive")
     if args.output is None:
@@ -57,7 +57,7 @@ def main() -> None:
     args = parse_args()
     request = {
         "type": "run_episode",
-        "frames": args.frames,
+        "cycles": args.cycles,
         "fps": args.fps,
         "output": str(args.output.resolve()),
         "prompt": args.prompt,
@@ -65,7 +65,7 @@ def main() -> None:
         "camera_view": args.camera_view,
     }
     print(
-        f"Requesting episode from {args.server_uri}: frames={args.frames} fps={args.fps} "
+        f"Requesting episode from {args.server_uri}: cycles={args.cycles} fps={args.fps} "
         f"prompt={args.prompt!r} posture={args.robot_posture} camera={args.camera_view}",
         flush=True,
     )
@@ -81,7 +81,7 @@ def main() -> None:
         if "error" in result:
             raise RuntimeError(f"episode server rejected request: {result['error']}")
         print(
-            f"Episode finished: cycles={result['cycles']}/{args.frames} "
+            f"Episode finished: cycles={result['cycles']}/{args.cycles} "
             f"done={result['done']} reset={result['reset']}",
             flush=True,
         )

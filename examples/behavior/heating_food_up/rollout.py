@@ -78,8 +78,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--log-file", type=Path, default=None, help="Log file (default: behavior runs/logs/UTC.log)")
     parser.add_argument("--planner-uri", default="ws://127.0.0.1:8000", help="Planner WebSocket URI")
     parser.add_argument("--prompt", default=DEFAULT_TASK, help="Task prompt sent to the planner")
-    parser.add_argument("--robot-posture", choices=("tuck", "untuck"), default="tuck")
-    parser.add_argument("--frames", type=int, default=200, help="Number of complete plan/execute cycles")
+    parser.add_argument("--robot-posture", choices=("tuck", "untuck"), default="untuck")
+    parser.add_argument("--cycles", type=int, default=200, help="Number of complete plan/execute cycles")
     parser.add_argument("--fps", type=int, default=20, help="Output video FPS")
     parser.add_argument(
         "--observation-only",
@@ -100,7 +100,7 @@ def parse_args() -> argparse.Namespace:
         default="near_right",
     )
     args = parser.parse_args()
-    for name in ("frames", "fps", "width", "height"):
+    for name in ("cycles", "fps", "width", "height"):
         if getattr(args, name) <= 0:
             parser.error(f"--{name} must be positive")
     # Keep accepting the old flag for command-line compatibility. It no
@@ -182,7 +182,7 @@ def _run(args: argparse.Namespace) -> None:
         )
 
         args.output.parent.mkdir(parents=True, exist_ok=True)
-        for cycle_index in range(args.frames):
+        for cycle_index in range(args.cycles):
             first_cycle = cycle_index == 0
             raw_obs = observation_collector.collect(args.prompt)
             if args.observation_only:
@@ -215,7 +215,7 @@ def _run(args: argparse.Namespace) -> None:
             if writer is None:
                 writer = imageio.get_writer(args.output, fps=args.fps, macro_block_size=1)
             print(
-                f"cycle={cycle_index + 1}/{args.frames} actions="
+                f"cycle={cycle_index + 1}/{args.cycles} actions="
                 f"{np.array2string(actions, precision=4, suppress_small=True, separator=', ')}",
                 flush=True,
             )
