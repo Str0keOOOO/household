@@ -14,10 +14,16 @@ CORE_SOURCE_ROOT = REPOSITORY_ROOT / "src"
 if str(CORE_SOURCE_ROOT) not in sys.path:
     sys.path.insert(0, str(CORE_SOURCE_ROOT))
 
-from planner.mock import MockPlanner
-from rerun_sink import RerunSink
-from serving.logging_utils import tee_output
-from serving.websocket_server import PlannerWebSocketServer
+from planner.mock import MockPlanner  # noqa: E402
+from rerun_sink import RerunSink  # noqa: E402
+from serving.logging_utils import tee_output  # noqa: E402
+from serving.websocket_server import PlannerWebSocketServer  # noqa: E402
+
+
+# R1 Pro's full OmniGibson action is base(3), torso(4), left arm/gripper(8),
+# right arm/gripper(8). The temporary mock moves only torso and right arm;
+# all base and left-side controls are exactly zero.
+R1PRO_MOCK_ACTIVE_ACTION_INDICES = tuple(range(3, 7)) + tuple(range(15, 23))
 
 
 def parse_args() -> argparse.Namespace:
@@ -60,7 +66,11 @@ def _make_recorder(args: argparse.Namespace):
 
 def main() -> None:
     args = parse_args()
-    planner = MockPlanner(action_chunk_size=4, action_dim=12)
+    planner = MockPlanner(
+        action_chunk_size=4,
+        action_dim=23,
+        active_indices=R1PRO_MOCK_ACTIVE_ACTION_INDICES,
+    )
     server = PlannerWebSocketServer(
         planner,
         host=args.host,

@@ -12,8 +12,8 @@ from typing import Any, Callable
 import numpy as np
 
 
-# These are the fixed R1 Pro camera prims used by record_scene.py for the
-# already-validated three-camera RGB video. They are deliberately explicit:
+# These are the fixed R1 Pro camera prims used by the observation collector.
+# They are deliberately explicit:
 # the collector never scans the stage or matches a camera by a fuzzy name.
 R1PRO_CAMERA_PATHS = {
     "zed": "zed_link/Camera",

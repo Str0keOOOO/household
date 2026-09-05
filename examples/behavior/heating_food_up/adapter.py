@@ -52,27 +52,6 @@ STATE_COMPONENT_SIZES = {name: value.stop - value.start for name, value in STATE
 STATE_DIM = len(STATE_LAYOUT)
 
 ACTION_LAYOUT = (
-    "torso_joint1",
-    "torso_joint2",
-    "torso_joint3",
-    "torso_joint4",
-    "right_arm_joint1",
-    "right_arm_joint2",
-    "right_arm_joint3",
-    "right_arm_joint4",
-    "right_arm_joint5",
-    "right_arm_joint6",
-    "right_arm_joint7",
-    "right_gripper",
-)
-ACTION_DIM = len(ACTION_LAYOUT)
-
-# OmniGibson R1 Pro scene action contract used only by the local execution
-# adapter. The planner server returns ACTION_LAYOUT (12 values); rollout.py
-# inserts zero base/left-arm controls before passing this 23-D vector to
-# env.step. The order matches r1pro_behavior.yaml and values are normalized
-# to [-1, 1].
-SIM_ACTION_LAYOUT = (
     "base_vx",
     "base_vy",
     "base_wz",
@@ -97,7 +76,7 @@ SIM_ACTION_LAYOUT = (
     "right_arm_joint7",
     "right_gripper",
 )
-SIM_ACTION_DIM = len(SIM_ACTION_LAYOUT)
+ACTION_DIM = len(ACTION_LAYOUT)
 
 _CAMERA_FIELDS = {
     "base": ("zed_rgb", "zed_depth", "K_zed", "T_base_camera_zed"),

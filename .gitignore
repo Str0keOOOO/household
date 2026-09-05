@@ -6,6 +6,7 @@ examples/behavior/runs/
 # Root Pixi owns only the shared planner environment. BEHAVIOR is managed by
 # the official Conda setup and stored at this ignored prefix.
 /.pixi/
+/examples/behavior/.pixi/
 /examples/behavior/.conda/
 
 # Python and editor by-products.

@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import random
@@ -35,14 +34,6 @@ def parse_args() -> argparse.Namespace:
     if args.output.exists() and not args.force:
         parser.error(f"output already exists: {args.output} (pass --force to replace it)")
     return args
-
-
-def sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as file:
-        for block in iter(lambda: file.read(1024 * 1024), b""):
-            digest.update(block)
-    return digest.hexdigest()
 
 
 def to_list(value) -> list[float]:
@@ -130,26 +121,7 @@ def main() -> None:
         env.task.save_task(env=env, save_dir=str(args.output.parent), override=args.force)
         if not args.output.is_file():
             raise RuntimeError(f"OmniGibson did not write the expected instance: {args.output}")
-
-        manifest = {
-            "schema_version": 1,
-            "task": task_name,
-            "scene": scene_name,
-            "activity_definition_id": 0,
-            "activity_instance_id": 0,
-            "random_seed": seed,
-            "config": str(args.config.resolve()),
-            "config_sha256": sha256(args.config),
-            "instance": str(args.output.resolve()),
-            "instance_sha256": sha256(args.output),
-            "robot_model": robot.model_name,
-            "robot_position": to_list(robot_position),
-            "robot_orientation": to_list(robot_orientation),
-        }
-        manifest_path = args.output.with_suffix(".manifest.json")
-        manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         print(f"Saved instance: {args.output}", flush=True)
-        print(f"Saved local manifest: {manifest_path}", flush=True)
     finally:
         if env is not None:
             og.shutdown()

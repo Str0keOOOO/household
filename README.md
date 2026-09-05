@@ -67,7 +67,6 @@ Python 3.10 Conda prefix、安装官方指定的 numpy/setuptools 和 CUDA 12.4 
 
 ```bash
 pixi run demo
-pixi run streaming-demo
 ```
 
 planner server 则在根项目运行 `pixi run server`。
@@ -122,7 +121,7 @@ pixi run episode --frames 200 --fps 20
 不再重新在线采样，因此同一台服务器上的运行可复现。
 
 该目录和 `examples/behavior/data/` 的其余内容一样受 BEHAVIOR 数据许可约束，已被 Git 忽略；Git 只
-记录生成脚本、所选场景/模型和随机种子；本地 manifest 记录校验值，不能重新分发任务 JSON。录像不放在数据目录，
+记录生成脚本、所选场景/模型和随机种子，不能重新分发本地任务 JSON。录像不放在数据目录，
 统一写到 `examples/behavior/runs/videos/`，对应日志写到 `examples/behavior/runs/logs/`。这样可以清理录像而不影响已保存的
 任务实例，也可以重录视频而不改变场景。
 
@@ -142,49 +141,32 @@ R1 Pro 录制初始姿态采用 `tuck`（双臂收拢）设置；这只是初始
 上层搁板；机器人从任务实例保存的位姿恢复后，覆盖其位置和朝向以居中正对冰箱。该覆盖不改写受
 许可保护的任务 JSON，也不代表机器人已经执行开门或放置动作。
 
-## WebRTC 实时观看
-
-以下是旧版 Isaac Sim 的浏览器客户端地址，按要求保留作参考；它**不适用于当前
-Isaac Sim 4.5 安装**，不可将其视为可用服务：
-
-<http://10.184.17.155:8211/streaming/webrtc-client?server=10.184.17.155>
-
-当前 Isaac Sim 4.5 官方推荐使用桌面版 *Isaac Sim WebRTC Streaming Client*，而非
-浏览器页面。使用本仓库的专用启动器：
-
-```bash
-cd /data6/xuchenfei/household/examples/behavior
-pixi run streaming-demo
-```
-
-它只启动场景和已安装的 `omni.kit.livestream.webrtc` 扩展，不生成 MP4，也没有时长参数；在自己的
-桌面电脑启动官方客户端并填写服务器可达 IP（例如 `10.184.17.155`）连接。服务器终端按 `Ctrl+C`
-才会结束会话。串流没有认证或加密，限可信内网使用，并确保该服务器的 WebRTC 串流端口可从客户端访问。
-
 ## 无桌面录像
 
-若只需稳定地观察或留存一次运行，不必配置远程串流：
+需要保存一次无桌面 BEHAVIOR 运行时，先在根目录启动 planner server，再运行同步 rollout：
 
 ```bash
+# terminal 1
+cd /data6/xuchenfei/household
+pixi run server
+
+# terminal 2
 cd /data6/xuchenfei/household/examples/behavior
-pixi run python tools/run_with_isaacsim.py r1pro/record_demo.py --output /path/to/output.mp4
+pixi run rollout --frames 200 --fps 20
 ```
 
-该本地启动器沿用上游 R1 Pro BEHAVIOR 示例的预采样场景、任务配置和相机位姿，在
-无界面模式将 viewer camera 输出写入忽略的
-`examples/behavior/runs/videos/r1pro-behavior-<UTC 时间>.mp4`。
-它不会修改 `third_party/BEHAVIOR-1K/`。可用 `--steps 40 --frame-stride 2` 缩短演示，
-或用 `--width 640 --height 360` 控制分辨率。
+录像写入忽略的 `examples/behavior/runs/videos/`，对应日志写入
+`examples/behavior/runs/logs/`。该流程不会修改 `third_party/BEHAVIOR-1K/`。
 
 ## Planner 通信接口
 
 `examples/behavior/heating_food_up/adapter.py` 将 BEHAVIOR 的 plain `raw_obs` 转成统一的
 `planner_obs`；其 RGBD 均为 `H x W x 4 float32`，RGB 在 `[0, 1]`，depth 为 meter。`state` 的
-固定 27 维顺序由 `STATE_LAYOUT` 定义。当前 `server` 使用 `MockPlanner` 返回 `(4, 12) float32`
+固定 27 维顺序由 `STATE_LAYOUT` 定义。当前 `server` 使用 `MockPlanner` 返回 `(4, 23) float32`
 小幅连续 action chunk，后续可直接替换为真实 planner。通信采用长期 WebSocket 连接和 MessagePack +
-NumPy 二进制编码；`rollout.py` 是真实 BEHAVIOR 场景的同步有限录制入口，执行前将 12 维 planner
-action 映射到 23 维 OmniGibson scene action（base 和左臂暂时为零），`client.py` 保留为未来
-从已初始化机器人调用一次 planner 的轻量封装。
+NumPy 二进制编码；`rollout.py` 是真实 BEHAVIOR 场景的同步有限录制入口，直接执行 planner 返回的
+23 维 OmniGibson scene action。MockPlanner 只生成 torso、右臂和右夹爪的小幅动作，base 和左侧
+控制维度为零。
 
 ## Planner 模块与第三方源码
 
@@ -198,19 +180,13 @@ src/
 └── planner/
     ├── __init__.py
     ├── base.py
-    ├── mock.py
-    ├── anygrasp.py
-    ├── curobo.py
-    ├── grasp_ranking.py
-    └── retreat_planning.py
+    └── mock.py
 ```
 
 各模块职责是：`base.py` 定义统一 `infer(obs) -> {"actions": actions}` 接口；
-`mock.py` 提供当前 WebSocket 联调的平滑 MockPlanner；`anygrasp.py` 是只输出统一
-grasp candidates 的薄 adapter；`grasp_ranking.py` 负责后续候选排序；`curobo.py`
-负责后续轨迹/action chunk 规划；`retreat_planning.py` 负责抓取后的安全撤出；
-`__init__.py` 导出公共接口。WebSocket server 只依赖统一 planner 接口，不直接导入
-第三方实现。
+`mock.py` 提供当前 WebSocket 联调的平滑 MockPlanner。未来 AnyGrasp、候选排序、cuRobo
+轨迹规划和 retreat planning 在真正实现后再加入 `src/planner/`，当前不保留空壳文件。
+`__init__.py` 导出公共接口。WebSocket server 只依赖统一 planner 接口，不直接导入第三方实现。
 
 后续真实规划的数据流保持为：
 

@@ -11,7 +11,6 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import os
-import subprocess
 import sys
 from pathlib import Path
 
@@ -26,20 +25,32 @@ from serving.websocket_client import PlannerWebSocketClient
 from serving.logging_utils import tee_output
 
 try:
-    from .adapter import ACTION_DIM, SIM_ACTION_DIM, BehaviorR1ProAdapter
+    from .adapter import ACTION_DIM, BehaviorR1ProAdapter
+    from .env_utils import (
+        CAMERA_VIEW_CHOICES,
+        DEFAULT_SCENE,
+        DEFAULT_TASK,
+        _default_instance,
+        build_environment,
+        ensure_task_instance,
+        execute_action_chunk,
+        project_root,
+    )
     from .r1pro_observation import R1ProObservationCollector
 except ImportError:
-    from adapter import ACTION_DIM, SIM_ACTION_DIM, BehaviorR1ProAdapter
+    from adapter import ACTION_DIM, BehaviorR1ProAdapter
+    from env_utils import (
+        CAMERA_VIEW_CHOICES,
+        DEFAULT_SCENE,
+        DEFAULT_TASK,
+        _default_instance,
+        build_environment,
+        ensure_task_instance,
+        execute_action_chunk,
+        project_root,
+    )
     from r1pro_observation import R1ProObservationCollector
 
-
-DEFAULT_TASK = "heating_food_up"
-DEFAULT_SCENE = "house_single_floor"
-
-
-def project_root() -> Path:
-    """Return the independent BEHAVIOR Pixi project root."""
-    return Path(os.environ.get("PIXI_PROJECT_ROOT", Path(__file__).resolve().parents[1])).resolve()
 
 
 def _default_output(root: Path) -> Path:
@@ -52,17 +63,6 @@ def _default_log_file(root: Path) -> Path:
     runs_root = Path(os.environ.get("BEHAVIOR_RUNS_PATH", root / "runs"))
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return runs_root / "logs" / f"rollout-{stamp}.log"
-
-
-def _default_instance(root: Path) -> Path:
-    return (
-        root
-        / "data"
-        / "omnigibson"
-        / "local-task-instances"
-        / DEFAULT_TASK
-        / f"{DEFAULT_SCENE}_task_{DEFAULT_TASK}_0_0_template.json"
-    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -96,7 +96,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--height", type=int, default=720)
     parser.add_argument(
         "--camera-view",
-        choices=("near_right", "task_right", "near_left", "task_left", "side_right", "side_left", "behind", "auto"),
+        choices=CAMERA_VIEW_CHOICES,
         default="near_right",
     )
     args = parser.parse_args()
@@ -119,109 +119,6 @@ def parse_args() -> argparse.Namespace:
     return args
 
 
-def ensure_task_instance(root: Path, scene_file: Path, initialization_config: Path) -> None:
-    """Create the local deterministic template when it has not been sampled."""
-    if scene_file.is_file():
-        return
-    if not initialization_config.is_file():
-        raise FileNotFoundError(f"initialization configuration does not exist: {initialization_config}")
-    sampler = root / "heating_food_up" / "sample_task_instance.py"
-    scene_file.parent.mkdir(parents=True, exist_ok=True)
-    repository_root = root.parents[1]
-    print(f"Task instance not found; sampling once into {scene_file}", flush=True)
-    subprocess.run(
-        [sys.executable, str(sampler), "--config", str(initialization_config), "--output", str(scene_file)],
-        check=True,
-        cwd=repository_root,
-    )
-
-
-def build_environment(og, yaml_module, args: argparse.Namespace):
-    """Build the same initialized R1 Pro scene as ``record_scene.py``."""
-    from omnigibson.macros import gm
-
-    gm.ENABLE_OBJECT_STATES = True
-    gm.USE_GPU_DYNAMICS = False
-    with (Path(og.example_config_path) / "r1pro_behavior.yaml").open(encoding="utf-8") as file:
-        config = yaml_module.safe_load(file)
-    config["scene"]["scene_model"] = args.scene
-    config["scene"]["load_room_types"] = None
-    config["scene"]["scene_file"] = str(args.scene_file.resolve())
-    # The BEHAVIOR scene template can contain a robot of its own.  When
-    # ``include_robots`` is true, OmniGibson imports that robot and skips the
-    # configured ``robots`` list entirely (see Environment._load_robots).  The
-    # imported robot has no R1 Pro VisionSensor configuration, so get_obs()
-    # would correctly return an empty dictionary.  Rollout owns the robot
-    # configuration below, so make the scene object-only and instantiate the
-    # configured R1 Pro exactly once.
-    config["scene"]["include_robots"] = False
-    config["render"]["viewer_width"] = args.width
-    config["render"]["viewer_height"] = args.height
-    robot_config = config["robots"][0]
-    robot_config["default_reset_mode"] = args.robot_posture
-    robot_config["obs_modalities"] = ["rgb", "depth"]
-    robot_config["include_sensor_names"] = None
-    robot_config["exclude_sensor_names"] = None
-    # Declare every native VisionSensor modality before Environment creation.
-    # Never add rgb / depth / camera_params after Isaac Sim has started.
-    robot_config["sensor_config"] = {
-        "VisionSensor": {
-            "modalities": ["rgb", "depth"],
-            "enabled": True,
-            "sensor_kwargs": {
-                "image_height": 128,
-                "image_width": 128,
-            },
-        }
-    }
-    print(
-        "stage=robot_sensor_config_ready "
-        "scene.include_robots=False modalities=rgb,depth VisionSensor.enabled=True",
-        flush=True,
-    )
-    config["task"].update(
-        activity_name=args.task,
-        activity_definition_id=0,
-        activity_instance_id=0,
-        online_object_sampling=False,
-        use_presampled_robot_pose=False,
-    )
-    return og.Environment(configs=config)
-
-
-def convert_planner_action_to_behavior(action: np.ndarray) -> np.ndarray:
-    """Validate and copy one planner action for the BEHAVIOR environment.
-
-    The planner contract is the 12-D ``ACTION_LAYOUT`` (torso + right arm +
-    right gripper). OmniGibson's controller expects a 23-D scene action, so
-    base and left-arm controls are held at zero until those planners are added.
-    """
-    action = np.asarray(action)
-    if action.shape != (ACTION_DIM,) or action.dtype != np.float32:
-        raise RuntimeError(
-            f"planner action must have shape {(ACTION_DIM,)} and dtype float32, "
-            f"got {action.shape} / {action.dtype}"
-        )
-    if not np.all(np.isfinite(action)):
-        raise RuntimeError("planner action must contain only finite values")
-    behavior_action = np.zeros((SIM_ACTION_DIM,), dtype=np.float32)
-    behavior_action[3:7] = action[0:4]       # torso
-    behavior_action[15:22] = action[4:11]    # right arm
-    behavior_action[22] = action[11]         # right gripper
-    return behavior_action
-
-
-def execute_action_chunk(env, actions: np.ndarray, on_step=None) -> bool:
-    """Execute every action in a chunk before collecting the next observation."""
-    for action in actions:
-        result = env.step(convert_planner_action_to_behavior(action))
-        if on_step is not None:
-            on_step()
-        if isinstance(result, tuple) and len(result) >= 4 and bool(result[2] or result[3]):
-            return True
-    return False
-
-
 def _run(args: argparse.Namespace) -> None:
     root = project_root()
     args.scene_file = args.scene_file.resolve()
@@ -233,14 +130,13 @@ def _run(args: argparse.Namespace) -> None:
     # template handling. Importing this module never starts Isaac Sim itself.
     import omnigibson as og
     import omnigibson.lazy as lazy
-    from omnigibson.macros import gm
 
     # These helpers contain the existing task initialization and generic camera
     # selection logic; they do not cross the planner boundary.
     try:
-        from .record_scene import apply_scene_initialization, frame_from_camera, position_task_camera
+        from .scene_utils import apply_scene_initialization, frame_from_camera, position_task_camera
     except ImportError:
-        from record_scene import apply_scene_initialization, frame_from_camera, position_task_camera
+        from scene_utils import apply_scene_initialization, frame_from_camera, position_task_camera
 
     env = None
     writer = None
@@ -269,7 +165,7 @@ def _run(args: argparse.Namespace) -> None:
                 "R1 Pro was created without VisionSensor instances; "
                 "check scene.include_robots=False and pre-environment sensor_config"
             )
-        _, _, camera_label, _, _, _ = position_task_camera(env, robot_position, args.camera_view, verbose=False)
+        camera_label = position_task_camera(env, robot_position, args.camera_view, verbose=False)
         print("stage=overview_camera_ready", flush=True)
         print("stage=before_usd_camera_access", flush=True)
         observation_collector = R1ProObservationCollector(

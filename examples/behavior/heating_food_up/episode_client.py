@@ -19,18 +19,10 @@ from websockets.sync.client import connect
 
 from serving.serialization import packb, unpackb
 
-
-DEFAULT_TASK = "heating_food_up"
-CAMERA_VIEW_CHOICES = (
-    "near_right",
-    "task_right",
-    "near_left",
-    "task_left",
-    "side_right",
-    "side_left",
-    "behind",
-    "auto",
-)
+try:
+    from .env_utils import CAMERA_VIEW_CHOICES, DEFAULT_TASK
+except ImportError:
+    from env_utils import CAMERA_VIEW_CHOICES, DEFAULT_TASK
 
 
 def _default_output() -> Path:

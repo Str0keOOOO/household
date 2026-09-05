@@ -49,9 +49,9 @@ pixi run rollout --frames 200 --fps 20
 采集 raw_obs → BehaviorR1ProAdapter → 阻塞 WebSocket planner → 完整 action chunk → env.step
 ```
 
-planner 返回 12 维 action chunk 后，本地执行适配器会将其映射到 OmniGibson 的 23 维场景
-action（base 和左臂暂时保持零控制），BEHAVIOR 才逐步执行其中的 action；执行完成后才发送下一次
-observation。`--frames` 表示 plan/execute 周期数。录像保存在 `runs/videos/`，BEHAVIOR
+planner 返回完整 23 维 OmniGibson action chunk，BEHAVIOR 直接逐步执行其中的 action；执行完成后
+才发送下一次 observation。MockPlanner 目前仅生成 torso、右臂和右夹爪的小幅动作，base 和左侧控制
+维度为零。`--frames` 表示 plan/execute 周期数。录像保存在 `runs/videos/`，BEHAVIOR
 侧日志自动保存在 `runs/logs/rollout-<UTC>.log`，同时继续显示在终端。server 默认只
 显示在 server 终端；如需保存 server 日志，可显式传入 `--log-file`。
 
@@ -60,7 +60,6 @@ observation。`--frames` 表示 plan/execute 周期数。录像保存在 `runs/v
 ```bash
 cd <repository-root>/examples/behavior
 pixi run demo
-pixi run streaming-demo
 ```
 
 ## GPU 选择

@@ -38,55 +38,33 @@ from serving.websocket_client import PlannerWebSocketClient
 
 try:
     from .adapter import ACTION_DIM, BehaviorR1ProAdapter
+    from .env_utils import (
+        CAMERA_VIEW_CHOICES,
+        DEFAULT_SCENE,
+        DEFAULT_TASK,
+        _default_instance,
+        build_environment,
+        ensure_task_instance,
+        execute_action_chunk,
+        project_root,
+    )
     from .r1pro_observation import R1ProObservationCollector
 except ImportError:
     from adapter import ACTION_DIM, BehaviorR1ProAdapter
+    from env_utils import (
+        CAMERA_VIEW_CHOICES,
+        DEFAULT_SCENE,
+        DEFAULT_TASK,
+        _default_instance,
+        build_environment,
+        ensure_task_instance,
+        execute_action_chunk,
+        project_root,
+    )
     from r1pro_observation import R1ProObservationCollector
-
-try:
-    from .rollout import (
-        DEFAULT_SCENE,
-        DEFAULT_TASK,
-        build_environment,
-        ensure_task_instance,
-        execute_action_chunk,
-        project_root,
-    )
-except ImportError:
-    from rollout import (
-        DEFAULT_SCENE,
-        DEFAULT_TASK,
-        build_environment,
-        ensure_task_instance,
-        execute_action_chunk,
-        project_root,
-    )
-
-
-CAMERA_VIEW_CHOICES = (
-    "near_right",
-    "task_right",
-    "near_left",
-    "task_left",
-    "side_right",
-    "side_left",
-    "behind",
-    "auto",
-)
 REQUEST_KEYS = frozenset(
     {"type", "frames", "fps", "output", "prompt", "robot_posture", "camera_view"}
 )
-
-
-def _default_instance(root: Path) -> Path:
-    return (
-        root
-        / "data"
-        / "omnigibson"
-        / "local-task-instances"
-        / DEFAULT_TASK
-        / f"{DEFAULT_SCENE}_task_{DEFAULT_TASK}_0_0_template.json"
-    )
 
 
 def parse_args() -> argparse.Namespace:
@@ -251,16 +229,16 @@ def run_episode(env, og, planner_client, adapter, args: argparse.Namespace, payl
     camera_view = str(payload["camera_view"])
 
     try:
-        from .record_scene import apply_scene_initialization, frame_from_camera, position_task_camera
+        from .scene_utils import apply_scene_initialization, frame_from_camera, position_task_camera
     except ImportError:
-        from record_scene import apply_scene_initialization, frame_from_camera, position_task_camera
+        from scene_utils import apply_scene_initialization, frame_from_camera, position_task_camera
 
     if reset:
         env.reset()
     pose_source = apply_scene_initialization(env, args.initialization_config, posture)
     robot = env.robots[0]
     robot_position = np.asarray(robot.get_position_orientation()[0], dtype=np.float32)
-    _, _, camera_label, _, _, _ = position_task_camera(env, robot_position, camera_view, verbose=False)
+    camera_label = position_task_camera(env, robot_position, camera_view, verbose=False)
     camera = og.sim.viewer_camera
     # The collector resolves only fixed USD Camera prims and never adds a
     # VisionSensor modality or camera-params annotator after construction.
